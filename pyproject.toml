@@ -5,8 +5,16 @@ readme = "README.md"  # the PyPI page
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{name = "Andreas V. Copan", email = "avcopan@uga.edu"}]
-dependencies = []
+dependencies = [
+    "numpy>=2.2.0",
+    "qccodec>=0.22.0",
+    "qcdata>=0.24.0",
+    "qcref>=0.5.1",
+]
 requires-python = ">= 3.13"
+
+[project.entry-points."qccodec.codecs"]
+gaussian = "hifithermkin.gaussian:codec"
 
 [project.urls]
 Repository = "https://github.com/avcopan/study-hifithermkin"
@@ -54,8 +62,7 @@ root_package = "hifithermkin"
 name = "Module Layering"
 type = "layers"
 layers = [
-    "hifithermkin.layer2",
-    "hifithermkin.layer1",
+    "hifithermkin.gaussian",
 ]
 
 # Pytest configurations

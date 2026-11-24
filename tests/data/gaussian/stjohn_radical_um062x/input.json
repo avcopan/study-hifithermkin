@@ -1,0 +1,112 @@
+{
+  "files": {},
+  "program": "gaussian",
+  "cmdline_args": [],
+  "calctype": "optimization",
+  "model": {
+    "method": "UM062X",
+    "basis": "def2TZVP"
+  },
+  "keywords": {},
+  "subprograms": [],
+  "structure": {
+    "symbols": [
+      "C",
+      "C",
+      "N",
+      "C",
+      "H",
+      "H",
+      "H",
+      "H",
+      "H",
+      "H",
+      "H",
+      "H"
+    ],
+    "geometry": [
+      [
+        -3.455885833065256,
+        0.32904201452855675,
+        0.1348462497594022
+      ],
+      [
+        -0.6829895371504258,
+        0.3551312130520674,
+        0.8630112948940523
+      ],
+      [
+        0.8807947678261647,
+        -0.6621648620124482,
+        -1.1119191552015553
+      ],
+      [
+        3.5058736858543185,
+        -0.6435350111731322,
+        -0.43196205986462005
+      ],
+      [
+        -4.624457704224063,
+        1.1039615555239897,
+        1.6443485669110247
+      ],
+      [
+        -3.754245399112502,
+        1.4464990582514021,
+        -1.568774268730482
+      ],
+      [
+        -4.071507856290901,
+        -1.5975628652468343,
+        -0.25148610947019345
+      ],
+      [
+        -0.3728414107198121,
+        -0.7338528821012228,
+        2.608522277217803
+      ],
+      [
+        -0.057503156397680624,
+        2.2908451823799822,
+        1.2996793652413232
+      ],
+      [
+        3.8316107245351776,
+        -1.755424355945051,
+        1.2907756205105998
+      ],
+      [
+        4.6503309673336455,
+        -1.4201548270142543,
+        -1.9535453490849903
+      ],
+      [
+        4.1504428061861525,
+        1.2870268073333266,
+        -0.022443904543414703
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 2,
+    "identifiers": {
+      "name": null,
+      "name_IUPAC": null,
+      "smiles": null,
+      "canonical_smiles": null,
+      "canonical_smiles_program": null,
+      "canonical_explicit_hydrogen_smiles": null,
+      "canonical_isomeric_smiles": null,
+      "canonical_isomeric_explicit_hydrogen_smiles": null,
+      "canonical_isomeric_explicit_hydrogen_mapped_smiles": null,
+      "inchi": null,
+      "inchikey": null,
+      "pubchem_cid": null,
+      "pubchem_sid": null,
+      "pubchem_conformerid": null
+    },
+    "connectivity": []
+  },
+  "structures": {},
+  "given": null,
+  "qcdata_version": "0.24.0"
+}

@@ -1,0 +1,88 @@
+{
+  "files": {},
+  "program": "gaussian",
+  "cmdline_args": [],
+  "calctype": "transition_state",
+  "model": {
+    "method": "RB3LYP",
+    "basis": "TZVP"
+  },
+  "keywords": {},
+  "subprograms": [],
+  "structure": {
+    "symbols": [
+      "C",
+      "C",
+      "N",
+      "N",
+      "H",
+      "H",
+      "H",
+      "H"
+    ],
+    "geometry": [
+      [
+        1.3271311405833985,
+        1.0196464644524512,
+        0.07699697131347294
+      ],
+      [
+        -2.0211603986129503,
+        -0.7369600026786749,
+        0.23105944051200478
+      ],
+      [
+        -1.0396264331459837,
+        1.6140582904580345,
+        -0.2417406943290189
+      ],
+      [
+        1.8048524336831517,
+        -1.5211273423368075,
+        0.04193660678846409
+      ],
+      [
+        1.2077079565520346,
+        -2.2939230826892674,
+        -1.6161020850101244
+      ],
+      [
+        2.8029131554535676,
+        2.3723030986339473,
+        0.5485211676096264
+      ],
+      [
+        -1.9467587934124433,
+        -1.4957481513353776,
+        2.13169907948295
+      ],
+      [
+        -3.5104395304369227,
+        -1.4997967434843058,
+        -0.9750037103253142
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "identifiers": {
+      "name": null,
+      "name_IUPAC": null,
+      "smiles": null,
+      "canonical_smiles": null,
+      "canonical_smiles_program": null,
+      "canonical_explicit_hydrogen_smiles": null,
+      "canonical_isomeric_smiles": null,
+      "canonical_isomeric_explicit_hydrogen_smiles": null,
+      "canonical_isomeric_explicit_hydrogen_mapped_smiles": null,
+      "inchi": null,
+      "inchikey": null,
+      "pubchem_cid": null,
+      "pubchem_sid": null,
+      "pubchem_conformerid": null
+    },
+    "connectivity": []
+  },
+  "structures": {},
+  "given": null,
+  "qcdata_version": "0.24.0"
+}

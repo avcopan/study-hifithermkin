@@ -1,8 +1,7 @@
-"""hifithermkin."""
+"""hifithermkin: a Gaussian 16 decoder, published as a qccodec plugin."""
 
 __version__ = "0.0.0"
 
-from .layer1 import greet
-from .layer2 import greet_jim
+from . import gaussian
 
-__all__ = ["greet", "greet_jim"]
+__all__ = ["gaussian"]

@@ -20,6 +20,16 @@ ignore-pypi-mapping = false
 
 [package.build.config.pypi-conda-map]
 # Add name mappings for packages not on conda-forge
+# qccodec and qcdata/qcref are only on PyPI, so leave them out of the conda package and
+# install them from PyPI in this workspace (see [pypi-dependencies])
+qccodec = false
+qcdata = false
+qcref = false
+
+[pypi-dependencies]
+qccodec = ">=0.22.0"
+qcdata = ">=0.24.0"
+qcref = ">=0.5.1"
 
 [package.host-dependencies]
 # Python and UV are automatically included
@@ -44,6 +54,8 @@ solve-strategy = "lowest"
 
 # Floors for packages that other packages depend on without (adequate) lower bounds
 [feature.lowest.constraints]
+# qccodec (PyPI only, so not constrained by conda) needs packaging>=23.0
+packaging = ">=23.0"
 # Data packages that should always be recent
 ca-certificates = ">=2026.10.18"
 tzdata = ">=2026c"

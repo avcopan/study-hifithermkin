@@ -1,0 +1,64 @@
+{
+  "files": {},
+  "program": "gaussian",
+  "cmdline_args": [],
+  "calctype": "optimization",
+  "model": {
+    "method": "RB3LYP",
+    "basis": "TZVP"
+  },
+  "keywords": {},
+  "subprograms": [],
+  "structure": {
+    "symbols": [
+      "N",
+      "H",
+      "H",
+      "H"
+    ],
+    "geometry": [
+      [
+        2.0083361910227864,
+        0.09254708049436669,
+        -0.11895347578420717
+      ],
+      [
+        1.3953937727985408,
+        -0.6488761211901234,
+        -1.774242534055486
+      ],
+      [
+        1.3954032958843798,
+        -1.043197041559104,
+        1.2951842926028876
+      ],
+      [
+        3.9219906058812266,
+        0.039991802326945367,
+        -0.12571559446335703
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "identifiers": {
+      "name": null,
+      "name_IUPAC": null,
+      "smiles": null,
+      "canonical_smiles": null,
+      "canonical_smiles_program": null,
+      "canonical_explicit_hydrogen_smiles": null,
+      "canonical_isomeric_smiles": null,
+      "canonical_isomeric_explicit_hydrogen_smiles": null,
+      "canonical_isomeric_explicit_hydrogen_mapped_smiles": null,
+      "inchi": null,
+      "inchikey": null,
+      "pubchem_cid": null,
+      "pubchem_sid": null,
+      "pubchem_conformerid": null
+    },
+    "connectivity": []
+  },
+  "structures": {},
+  "given": null,
+  "qcdata_version": "0.24.0"
+}

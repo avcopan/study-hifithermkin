@@ -1,0 +1,323 @@
+{
+  "calcinfo_natoms": 4,
+  "calcinfo_nalpha": null,
+  "calcinfo_nbeta": null,
+  "calcinfo_nbasis": null,
+  "calcinfo_nmo": null,
+  "extras": {
+    "gaussian": {
+      "jobtype": "Freq",
+      "method": "RB3LYP",
+      "basis": "TZVP",
+      "route": "#N Geom=AllCheck Guess=TCheck SCRF=Check GenChk RB3LYP/TZVP Freq",
+      "routes": [
+        "# B3LYP/TZVP EmpiricalDispersion=GD3 Opt=(maxcycles=100) Int=UltraFine SCF=QC Freq",
+        "#N Geom=AllCheck Guess=TCheck SCRF=Check GenChk RB3LYP/TZVP Freq"
+      ],
+      "nimag": 0,
+      "frequencies": [
+        1006.2283,
+        1669.8282,
+        1669.8933,
+        3473.3415,
+        3603.0937,
+        3603.5802
+      ],
+      "zero_point_energy": 0.0342317,
+      "thermal_correction_energy": 0.037105,
+      "thermal_correction_enthalpy": 0.038049,
+      "thermal_correction_gibbs": 0.015167,
+      "temperature": 298.15,
+      "pressure": 1.0
+    }
+  },
+  "files": {},
+  "provenance": {
+    "program": "gaussian",
+    "program_version": "G16RevB.01",
+    "program_commit": null
+  },
+  "frames": [
+    {
+      "success": true,
+      "structure": {
+        "symbols": [
+          "N",
+          "H",
+          "H",
+          "H"
+        ],
+        "geometry": [
+          [
+            2.0083361910227864,
+            0.09254708049436669,
+            -0.11895347578420717
+          ],
+          [
+            1.3953937727985408,
+            -0.6488761211901234,
+            -1.774242534055486
+          ],
+          [
+            1.3954032958843798,
+            -1.043197041559104,
+            1.2951842926028876
+          ],
+          [
+            3.9219906058812266,
+            0.039991802326945367,
+            -0.12571559446335703
+          ]
+        ],
+        "charge": 0,
+        "multiplicity": 1,
+        "identifiers": {
+          "name": null,
+          "name_IUPAC": null,
+          "smiles": null,
+          "canonical_smiles": null,
+          "canonical_smiles_program": null,
+          "canonical_explicit_hydrogen_smiles": null,
+          "canonical_isomeric_smiles": null,
+          "canonical_isomeric_explicit_hydrogen_smiles": null,
+          "canonical_isomeric_explicit_hydrogen_mapped_smiles": null,
+          "inchi": null,
+          "inchikey": null,
+          "pubchem_cid": null,
+          "pubchem_sid": null,
+          "pubchem_conformerid": null
+        },
+        "connectivity": []
+      },
+      "results": {
+        "calcinfo_natoms": 4,
+        "calcinfo_nalpha": null,
+        "calcinfo_nbeta": null,
+        "calcinfo_nbasis": null,
+        "calcinfo_nmo": null,
+        "files": {},
+        "provenance": {
+          "program": "gaussian",
+          "program_version": "G16RevB.01",
+          "program_commit": null
+        },
+        "energy": -56.5837497465,
+        "gradient": null,
+        "hessian": [
+          [
+            0.60325391,
+            0.14204444,
+            0.01824548,
+            -0.08726739,
+            -0.07859699,
+            -0.10560494,
+            -0.08726503,
+            -0.10273597,
+            0.08230968,
+            -0.42872148,
+            0.03928852,
+            0.00504979
+          ],
+          [
+            0.14204444,
+            0.25514044,
+            -0.0512009,
+            -0.0539056,
+            -0.08085729,
+            -0.11056395,
+            -0.07408843,
+            -0.1618234,
+            0.15545729,
+            -0.01405041,
+            -0.01245975,
+            0.00630756
+          ],
+          [
+            0.01824548,
+            -0.0512009,
+            0.64710908,
+            -0.08677935,
+            -0.15446798,
+            -0.33366884,
+            0.07033652,
+            0.19936166,
+            -0.25270108,
+            -0.00180265,
+            0.00630721,
+            -0.06073916
+          ],
+          [
+            -0.08726739,
+            -0.0539056,
+            -0.08677935,
+            0.09491622,
+            0.06378526,
+            0.11238718,
+            0.00470885,
+            0.00675498,
+            0.01286809,
+            -0.01235768,
+            -0.01663464,
+            -0.03847592
+          ],
+          [
+            -0.07859699,
+            -0.08085729,
+            -0.15446798,
+            0.06378526,
+            0.07911969,
+            0.12872456,
+            0.00978823,
+            0.00533423,
+            0.02459401,
+            0.0050235,
+            -0.00359664,
+            0.00114941
+          ],
+          [
+            -0.10560494,
+            -0.11056395,
+            -0.33366884,
+            0.11238718,
+            0.12872456,
+            0.35705692,
+            -0.01074278,
+            -0.0167501,
+            -0.02469125,
+            0.00396055,
+            -0.0014105,
+            0.00130317
+          ],
+          [
+            -0.08726503,
+            -0.07408843,
+            0.07033652,
+            0.00470885,
+            0.00978823,
+            -0.01074278,
+            0.09491322,
+            0.09011958,
+            -0.09261571,
+            -0.01235705,
+            -0.02581938,
+            0.03302198
+          ],
+          [
+            -0.10273597,
+            -0.1618234,
+            0.19936166,
+            0.00675498,
+            0.00533423,
+            -0.0167501,
+            0.09011958,
+            0.15983685,
+            -0.18024697,
+            0.00586142,
+            -0.00334768,
+            -0.00236459
+          ],
+          [
+            0.08230968,
+            0.15545729,
+            -0.25270108,
+            0.01286809,
+            0.02459401,
+            -0.02469125,
+            -0.09261571,
+            -0.18024697,
+            0.27633857,
+            -0.00256205,
+            0.00019567,
+            0.00105376
+          ],
+          [
+            -0.42872148,
+            -0.01405041,
+            -0.00180265,
+            -0.01235768,
+            0.0050235,
+            0.00396055,
+            -0.01235705,
+            0.00586142,
+            -0.00256205,
+            0.45343621,
+            0.0031655,
+            0.00040415
+          ],
+          [
+            0.03928852,
+            -0.01245975,
+            0.00630721,
+            -0.01663464,
+            -0.00359664,
+            -0.0014105,
+            -0.02581938,
+            -0.00334768,
+            0.00019567,
+            0.0031655,
+            0.01940406,
+            -0.00509238
+          ],
+          [
+            0.00504979,
+            0.00630756,
+            -0.06073916,
+            -0.03847592,
+            0.00114941,
+            0.00130317,
+            0.03302198,
+            -0.00236459,
+            0.00105376,
+            0.00040415,
+            -0.00509238,
+            0.05838224
+          ]
+        ],
+        "nuclear_repulsion_energy": null,
+        "wavefunction": null,
+        "dipole_moment": null,
+        "quadrupole_moment": null,
+        "atomic_charges": null,
+        "atomic_charges_kind": null,
+        "atomic_spin_populations": null,
+        "atomic_spin_populations_kind": null,
+        "atomic_dipoles": null,
+        "atomic_quadrupoles": null,
+        "shell_populations": null,
+        "shell_atoms": null,
+        "shell_angular_momenta": null,
+        "point_charge_gradient": null,
+        "energy_components": {},
+        "scf_iterations": null,
+        "scf_s_squared": null,
+        "polarizability": null,
+        "bond_orders": null,
+        "bond_orders_kind": null,
+        "vibrational_analysis": null,
+        "thermochemistry": []
+      },
+      "warnings": [],
+      "error": null,
+      "record": {},
+      "logs": null,
+      "traceback": null,
+      "execution": {
+        "scratch_dir": null,
+        "wall_time": null,
+        "hostname": null,
+        "host_cpu": null,
+        "host_mem_gib": null,
+        "cpu_model": null,
+        "devices": [],
+        "libc": null,
+        "timings": {},
+        "threads": null,
+        "peak_memory_gib": null,
+        "peak_device_memory_gib": null,
+        "identities": {},
+        "store_run": null
+      }
+    }
+  ],
+  "qcdata_version": "0.24.0"
+}
