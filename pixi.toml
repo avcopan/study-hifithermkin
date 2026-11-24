@@ -1,11 +1,16 @@
 [workspace]
-channels = ["conda-forge"]
+channels = ["conda-forge", "https://repo.prefix.dev/avcopan/automech"]
 platforms = ["linux-64"]
 preview = ["pixi-build"]
 requires-pixi = ">=0.82"
 
 [dependencies]
 hifithermkin = { path = "." }
+# A snapshot, not editable: the import must not change under a running job. It needs the
+# stage-counts change (StageRow.get_or_create), which the released 0.0.23 lacks.
+autostorage = { path = "../autostorage" }
+h5py = "*"
+rdkit = "*"
 
 [package]
 name = "hifithermkin"
@@ -25,6 +30,8 @@ ignore-pypi-mapping = false
 qccodec = false
 qcdata = false
 qcref = false
+autogeom = "autogeom"  # from the avcopan/automech channel
+autostorage = "autostorage"  # likewise
 
 [pypi-dependencies]
 qccodec = ">=0.22.0"
@@ -54,6 +61,8 @@ solve-strategy = "lowest"
 
 # Floors for packages that other packages depend on without (adequate) lower bounds
 [feature.lowest.constraints]
+# qcdata (PyPI only) needs pydantic>=2.12, above what the conda solve would pick
+pydantic = ">=2.12"
 # qccodec (PyPI only, so not constrained by conda) needs packaging>=23.0
 packaging = ">=23.0"
 # Data packages that should always be recent

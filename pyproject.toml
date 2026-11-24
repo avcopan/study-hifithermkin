@@ -6,10 +6,15 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{name = "Andreas V. Copan", email = "avcopan@uga.edu"}]
 dependencies = [
+    "autogeom>=0.0.3",
+    "autostorage>=0.0.23",
+    "h5py>=3.10",
     "numpy>=2.2.0",
+    "pint>=0.24",
     "qccodec>=0.22.0",
     "qcdata>=0.24.0",
     "qcref>=0.5.1",
+    "rdkit>=2024.3",
 ]
 requires-python = ">= 3.13"
 
@@ -39,7 +44,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**.py" = ["S101", "PLR2004"]  # assert, magic values
+"tests/**.py" = ["S101", "PLR2004", "D103"]  # assert, magic values, docstrings
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
