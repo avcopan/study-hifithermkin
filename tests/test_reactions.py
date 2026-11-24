@@ -166,3 +166,11 @@ def test_missing_species(world: World) -> None:
     reason = world.react("MR_1_0", ["mol1", "mol1"], ["mol2", "mol3"])
     assert reason == "species_parse_error"
     assert world.react("MR_1_0", ["mol1", "mol9"], ["mol2"]) == "species_not_imported"
+
+
+def test_reaction_with_equal_sides_is_skipped(world: World) -> None:
+    assert (
+        world.react("MR_1_0", ["mol1", "mol2"], ["mol2", "mol1"])
+        == "same_reactants_and_products"
+    )
+    assert world.counts["skipped_same_reactants_and_products"] == 1

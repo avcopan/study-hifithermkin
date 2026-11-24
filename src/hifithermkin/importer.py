@@ -45,6 +45,7 @@ log = logging.getLogger("hifithermkin")
 
 PROGRESS_EVERY = 2000  # logs
 DEFAULT_BATCH = 300  # logs per commit
+MAX_PENDING_LINES = 5000  # checkpoint lines held back, skipped logs included
 REACTION_BATCH = 1000  # reactions per commit
 
 
@@ -150,7 +151,7 @@ class _Writer:
                 rate,
                 dict(self.store.counts),
             )
-        if self.in_batch >= self.batch:
+        if self.in_batch >= self.batch or len(self.lines) >= MAX_PENDING_LINES:
             self.commit()
 
 
