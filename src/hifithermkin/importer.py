@@ -22,6 +22,7 @@ import csv
 import json
 import logging
 import multiprocessing
+import random
 import sys
 import time
 from collections import Counter
@@ -95,6 +96,7 @@ def _jobs(  # noqa: PLR0913
     subset: bool,
     limit: int | None,
     graphs: bool,
+    sample: int | None,
 ) -> Iterator[Future[ParsedLog | Skip]]:
     """Submit every log not done to the pool."""
     if dataset == "stjohn":
@@ -104,6 +106,8 @@ def _jobs(  # noqa: PLR0913
     mapping = sources.rgd1_mapping()
     species = sources.rgd1_subset_species() if subset else None
     members = sources.rgd1_members(mapping, subset=species)
+    if sample is not None:  # a reproducible random sample, for measuring throughput
+        members = iter(random.Random(0).sample(list(members), sample))  # noqa: S311
     for count, member in enumerate(members):
         if limit is not None and count >= limit:
             return
@@ -184,6 +188,7 @@ def run_logs(  # noqa: PLR0913
     batch: int = DEFAULT_BATCH,
     limit: int | None = None,
     graphs: bool = False,
+    sample: int | None = None,
 ) -> Counter[str]:
     """Import the logs of a dataset; returns the counts of this run."""
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -200,7 +205,13 @@ def run_logs(  # noqa: PLR0913
             ) as pool:
                 pending: set[Future[ParsedLog | Skip]] = set()
                 for future in _jobs(
-                    dataset, pool, done, subset=subset, limit=limit, graphs=graphs
+                    dataset,
+                    pool,
+                    done,
+                    subset=subset,
+                    limit=limit,
+                    graphs=graphs,
+                    sample=sample,
                 ):
                     pending.add(future)
                     while len(pending) >= 2 * workers:
@@ -287,6 +298,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH)
     parser.add_argument("--limit", type=int, help="logs to read (testing)")
+    parser.add_argument(
+        "--sample", type=int, help="RGD1: a random sample of N logs (throughput tests)"
+    )
     parser.add_argument("--no-reactions", action="store_true")
     parser.add_argument(
         "--graphs", action="store_true", help="store protomol_graph@0 identities"
@@ -304,6 +318,7 @@ def main(argv: list[str] | None = None) -> None:
         batch=args.batch,
         limit=args.limit,
         graphs=args.graphs,
+        sample=args.sample,
     )
     if args.dataset == "rgd1" and not args.no_reactions:
         run_reactions(out, subset=args.subset, limit=args.limit)

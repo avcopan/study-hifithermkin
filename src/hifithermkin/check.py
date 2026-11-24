@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 import autogeom
 import h5py
 import numpy as np
+import protomol
 from autostorage import (
     CalculationRow,
     Database,
@@ -39,7 +40,7 @@ from rdkit.rdBase import DisableLog
 from sqlalchemy import func
 from sqlmodel import col, select
 
-from . import sources
+from . import graphs, sources
 from .parse import ParsedLog, parse_log
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ FREQUENCY_TOLERANCE = 1.0  # cm^-1
 LINE = "\n"
 CONNECTIVITY = 3  # InChI layers: version, formula, connectivity
 MAX_EXAMPLES = 5
+MAX_GRAPH_EXAMPLES = 10
 LOOSE = 1e-5  # Eh, agreement with the h5
 HARTREE_TO_KCAL = 627.5094740631
 
@@ -422,6 +424,100 @@ def rgd1_energies_section(session: AutostorageSession, h5_path: Path) -> str:
     return LINE.join(lines)
 
 
+def graph_section(session: AutostorageSession, h5_path: Path) -> str:
+    """The TS graphs: breaking and forming bonds from the mapped SMILES and the h5."""
+    energy_channels_in_db = [
+        (p.calculation.input_provenance or {})["member"]
+        for p in session.exec(select(StationaryPointRow)).all()
+        if p.order == 1
+    ]
+    channels = [
+        m.rsplit("/", 1)[-1].removesuffix("-TS.out")
+        for m in energy_channels_in_db
+        if m.endswith("-TS.out")
+    ]
+    smiles = graphs._channels()  # noqa: SLF001
+    agree, disagree = 0, []
+    skipped: Counter[str] = Counter()
+    with h5py.File(h5_path) as h5:
+        for channel in channels:
+            group = h5.get(channel)
+            if group is None or channel not in smiles:
+                skipped["no source"] += 1
+                continue
+            symbols = [
+                autogeom.element.from_key(int(z)).symbol for z in group["elements"][()]
+            ]
+            try:
+                mapped = graphs.mapped_reaction_graph(*smiles[channel], spin=0)
+                ends = [
+                    protomol.from_geometry(
+                        autogeom.Geometry(
+                            symbols=symbols,
+                            coordinates=group[key][()],
+                            charge=0,
+                            spin=0,
+                        )
+                    )
+                    for key in ("RG", "PG")
+                ]
+                from_geometries = protomol.reaction_graph(*ends)
+            except Exception as exc:  # noqa: BLE001
+                skipped[type(exc).__name__] += 1
+                continue
+            ours = (set(mapped.breaking), set(mapped.forming))
+            theirs = (set(from_geometries.breaking), set(from_geometries.forming))
+            if ours == theirs:
+                agree += 1
+            else:
+                disagree.append((channel, ours, theirs))
+    lines = [
+        "## TS graphs: breaking and forming bonds, mapped SMILES against the h5",
+        (
+            f"{len(channels)} TSs: {agree} agree, {len(disagree)} disagree, "
+            f"{dict(skipped)} not compared"
+        ),
+    ]
+    for channel, ours, theirs in disagree[:MAX_GRAPH_EXAMPLES]:
+        lines.append(
+            f"- {channel}: SMILES (breaking, forming) {ours}; geometries {theirs}"
+        )
+    return LINE.join(lines)
+
+
+def graph_order_section(session: AutostorageSession, sample: int) -> str:
+    """Bonds that neither break nor form in a TS graph, against its geometry's bonds."""
+    smiles = graphs._channels()  # noqa: SLF001
+    points = [p for p in session.exec(select(StationaryPointRow)).all() if p.order == 1]
+    random.Random(1).shuffle(points)  # noqa: S311 - a reproducible sample
+    checked, bad, skipped = 0, [], 0
+    for point in points:
+        member = (point.calculation.input_provenance or {})["member"]
+        channel = member.rsplit("/", 1)[-1].removesuffix("-TS.out")
+        if channel not in smiles:
+            skipped += 1
+            continue
+        try:
+            graph = graphs.mapped_reaction_graph(*smiles[channel], spin=0)
+        except Exception:  # noqa: BLE001
+            skipped += 1
+            continue
+        geometry_bonds = set(protomol.from_geometry(_geometry(point.geometry)).bonds)
+        unchanged = set(graph.bonds) - set(graph.breaking) - set(graph.forming)
+        checked += 1
+        missing = unchanged - geometry_bonds
+        if missing:
+            bad.append((channel, len(missing), len(unchanged)))
+        if checked >= sample:
+            break
+    lines = [
+        "## TS graph atom order: unchanged bonds against the geometry's bonds",
+        f"{checked} sampled TSs ({skipped} without a graph): {len(bad)} disagree",
+    ]
+    lines += [f"- {c}: {m} of {n} unchanged bonds missing" for c, m, n in bad[:10]]
+    return LINE.join(lines)
+
+
 def stjohn_sdf(path: Path | None = None) -> dict[str, tuple[str, float]]:
     """Source SMILES and SCF energy by record name (``<id>_<suffix>``) of the SDF."""
     path = (
@@ -497,6 +593,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("dataset", choices=["rgd1", "stjohn"])
     parser.add_argument("--db", type=Path, required=True)
     parser.add_argument("--sample", type=int, default=200)
+    parser.add_argument("--graphs", action="store_true", help="check the TS graphs")
     args = parser.parse_args(argv)
     sections = []
     with Database(args.db) as db, db.session() as session:
@@ -513,11 +610,11 @@ def main(argv: list[str] | None = None) -> None:
                 text, _, mol = line.rpartition("   ")
                 smiles[f"raw_output/RP/{mol}.out"] = text
             sections.append(inchi_section(session, smiles.get))
-            sections.append(
-                rgd1_energies_section(
-                    session, sources.data_dir() / "rgd1/RGD1_allrxns.h5"
-                )
-            )
+            h5_path = sources.data_dir() / "rgd1/RGD1_allrxns.h5"
+            sections.append(rgd1_energies_section(session, h5_path))
+            if args.graphs:
+                sections.append(graph_section(session, h5_path))
+                sections.append(graph_order_section(session, args.sample))
         else:
             sdf = stjohn_sdf()
 

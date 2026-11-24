@@ -74,14 +74,14 @@ def register_interim_algorithm() -> None:
     )
 
 
-def _mapped_graph(smiles: str) -> protomol.StereoMolGraph:
+def _mapped_graph(smiles: str, spin: int | None = None) -> protomol.StereoMolGraph:
     """The graph of an atom-mapped SMILES, atoms in map-number order."""
     DisableLog("rdApp.*")
     params = Chem.SmilesParserParams()
     params.removeHs = False
     params.sanitize = False
     molecule = Chem.MolFromSmiles(smiles, params)
-    graph = protomol.from_smiles(smiles)
+    graph = protomol.from_smiles(smiles, spin=spin)
     if molecule is None or molecule.GetNumAtoms() != len(graph.symbols):
         msg = "RDKit and protomol disagree on the atoms of the SMILES"
         raise ValueError(msg)
@@ -94,9 +94,18 @@ def _mapped_graph(smiles: str) -> protomol.StereoMolGraph:
     return protomol.relabel(graph, atom_map)
 
 
-def mapped_reaction_graph(reactant: str, product: str) -> protomol.StereoReactionGraph:
-    """The reaction graph of an atom-mapped reaction SMILES, in map-number order."""
-    return protomol.reaction_graph(_mapped_graph(reactant), _mapped_graph(product))
+def mapped_reaction_graph(
+    reactant: str, product: str, spin: int | None = None
+) -> protomol.StereoReactionGraph:
+    """The reaction graph of an atom-mapped reaction SMILES, in map-number order.
+
+    ``spin`` overrides the spin that the SMILES implies on both sides (RGD1 is all
+    closed shell: its singlet carbenes are written as radicals, which would read as
+    triplets).
+    """
+    return protomol.reaction_graph(
+        _mapped_graph(reactant, spin), _mapped_graph(product, spin)
+    )
 
 
 def _aligned_distance(a: np.ndarray, b: np.ndarray) -> float:
@@ -152,7 +161,7 @@ def _ts_graph(log: ParsedLog) -> tuple[Any, str]:
         return None, "ts_no_source"
     if not tsg_matches(log, group["TSG"][()], group["elements"][()]):
         return None, "ts_atom_order_mismatch"
-    return mapped_reaction_graph(*smiles), "ts_from_mapped_smiles"
+    return mapped_reaction_graph(*smiles, spin=0), "ts_from_mapped_smiles"
 
 
 def attach_graph(log: ParsedLog) -> ParsedLog:

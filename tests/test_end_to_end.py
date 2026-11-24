@@ -189,4 +189,6 @@ def test_import_with_graph_identities(
     with Database(out) as db, db.session() as session:
         links = session.exec(select(IdentityStationaryLink)).all()
         names = [link.identity.algorithm_name for link in links]
+        text = check.graph_order_section(session, 5)
     assert names.count("protomol_graph@0") == 3  # the TS, and the two perceived
+    assert "1 sampled TSs (0 without a graph): 0 disagree" in text
