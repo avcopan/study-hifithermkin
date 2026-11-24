@@ -21,7 +21,7 @@ def test_writer_checkpoints_committed_batches(
 ) -> None:
     out = tmp_path / "x.db"
     with Database(out) as db, db.session() as session:
-        writer = _Writer("rgd1", session, out, batch=2, graph_fn=None)
+        writer = _Writer("rgd1", session, out, batch=2)
         writer.take(logs["rgd1_nh3_minimum"])
         assert not (tmp_path / "x.db.checkpoint.tsv").read_text()  # not committed yet
         writer.take(logs["rgd1_ts_MR_299320_1"])  # the batch of two commits

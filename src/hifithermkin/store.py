@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from autostorage import (
     CalculationGeometryLink,
@@ -20,17 +20,12 @@ from autostorage import (
 from sqlmodel import col, select
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from autostorage import AutostorageSession
 
     from .parse import ParsedLog
     from .routes import ModelSpec
 
 __all__ = ["Store"]
-
-type GraphFn = Callable[[ParsedLog, GeometryRow], Any]
-"""The graph to pass as a point's ``graph=``; ``None`` lets it be perceived."""
 
 
 class Store:
@@ -42,12 +37,9 @@ class Store:
         unclassified: Route tokens that no rule classified, with their counts.
     """
 
-    def __init__(
-        self, session: AutostorageSession, *, graph_fn: GraphFn | None = None
-    ) -> None:
+    def __init__(self, session: AutostorageSession) -> None:
         """Create a store that writes to ``session`` (it never commits)."""
         self.session = session
-        self.graph_fn = graph_fn
         self.counts: Counter[str] = Counter()
         self.unclassified: Counter[str] = Counter()
         self._models: dict[tuple, ModelRow] = {}
@@ -126,8 +118,9 @@ class Store:
                     value=value,
                 )
             )
-        graph = self.graph_fn(log, geometry) if self.graph_fn else None
-        extra = {} if graph is None else {"graph": graph}
+        extra = {} if log.graph is None else {"graph": log.graph}
+        if log.graph_status:
+            self.counts[f"graph_{log.graph_status}"] += 1
         point = StationaryPointRow(
             geometry=geometry, calculation=calculation, order=log.nimag, **extra
         )

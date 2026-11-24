@@ -21,6 +21,7 @@ import argparse
 import csv
 import json
 import logging
+import multiprocessing
 import sys
 import time
 from collections import Counter
@@ -32,9 +33,10 @@ from typing import TYPE_CHECKING, Any
 from autostorage import Database
 
 from . import sources
+from .graphs import attach_graph, register_interim_algorithm
 from .parse import ParsedLog, Skip
 from .reactions import Entry, add_reaction
-from .store import GraphFn, Store
+from .store import Store
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -67,18 +69,37 @@ def _read_checkpoint(path: Path) -> dict[str, Entry]:
     return index
 
 
-def _jobs(
+def _finish(result: ParsedLog | Skip, *, graphs: bool) -> ParsedLog | Skip:
+    """Add the graph to a parsed log (in the worker; the main process only writes)."""
+    return attach_graph(result) if graphs and isinstance(result, ParsedLog) else result
+
+
+def _work_rgd1(member: str, graphs: bool) -> ParsedLog | Skip:  # noqa: FBT001
+    return _finish(sources.read_rgd1(member), graphs=graphs)
+
+
+def _work_stjohn(
+    member: str,
+    packed: bytes,
+    subset: bool,  # noqa: FBT001
+    graphs: bool,  # noqa: FBT001
+) -> ParsedLog | Skip:
+    return _finish(sources.read_stjohn(member, packed, subset=subset), graphs=graphs)
+
+
+def _jobs(  # noqa: PLR0913
     dataset: str,
     pool: ProcessPoolExecutor,
     done: set[str],
     *,
     subset: bool,
     limit: int | None,
+    graphs: bool,
 ) -> Iterator[Future[ParsedLog | Skip]]:
     """Submit every log not done to the pool."""
     if dataset == "stjohn":
         for member, packed in sources.stjohn_members(done, limit):
-            yield pool.submit(sources.read_stjohn, member, packed, subset=subset)
+            yield pool.submit(_work_stjohn, member, packed, subset, graphs)
         return
     mapping = sources.rgd1_mapping()
     species = sources.rgd1_subset_species() if subset else None
@@ -87,7 +108,7 @@ def _jobs(
         if limit is not None and count >= limit:
             return
         if member not in done:
-            yield pool.submit(sources.read_rgd1, member, subset=False)
+            yield pool.submit(_work_rgd1, member, graphs)
 
 
 class _Writer:
@@ -100,12 +121,11 @@ class _Writer:
         out: Path,
         *,
         batch: int,
-        graph_fn: GraphFn | None,
     ) -> None:
         self.dataset = dataset
         self.session = session
         self.batch = batch
-        self.store = Store(session, graph_fn=graph_fn)
+        self.store = Store(session)
         self.counts: Counter[str] = Counter()
         self.started = time.perf_counter()
         self.lines: list[str] = []
@@ -163,18 +183,25 @@ def run_logs(  # noqa: PLR0913
     workers: int,
     batch: int = DEFAULT_BATCH,
     limit: int | None = None,
-    graph_fn: GraphFn | None = None,
+    graphs: bool = False,
 ) -> Counter[str]:
     """Import the logs of a dataset; returns the counts of this run."""
     out.parent.mkdir(parents=True, exist_ok=True)
     done = set(_read_checkpoint(Path(f"{out}.checkpoint.tsv")))
     log.info("%s: %d logs already done", dataset, len(done))
+    if graphs:
+        register_interim_algorithm()  # before the Database seeds its algorithm rows
     with Database(out) as db, db.session() as session:
-        writer = _Writer(dataset, session, out, batch=batch, graph_fn=graph_fn)
+        writer = _Writer(dataset, session, out, batch=batch)
         try:
-            with ProcessPoolExecutor(workers) as pool:
+            # spawn: workers start with this process's environment as it is now
+            with ProcessPoolExecutor(
+                workers, mp_context=multiprocessing.get_context("spawn")
+            ) as pool:
                 pending: set[Future[ParsedLog | Skip]] = set()
-                for future in _jobs(dataset, pool, done, subset=subset, limit=limit):
+                for future in _jobs(
+                    dataset, pool, done, subset=subset, limit=limit, graphs=graphs
+                ):
                     pending.add(future)
                     while len(pending) >= 2 * workers:
                         finished, pending = wait(pending, return_when=FIRST_COMPLETED)
@@ -261,6 +288,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH)
     parser.add_argument("--limit", type=int, help="logs to read (testing)")
     parser.add_argument("--no-reactions", action="store_true")
+    parser.add_argument(
+        "--graphs", action="store_true", help="store protomol_graph@0 identities"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(message)s", stream=sys.stderr
@@ -273,6 +303,7 @@ def main(argv: list[str] | None = None) -> None:
         workers=args.workers,
         batch=args.batch,
         limit=args.limit,
+        graphs=args.graphs,
     )
     if args.dataset == "rgd1" and not args.no_reactions:
         run_reactions(out, subset=args.subset, limit=args.limit)

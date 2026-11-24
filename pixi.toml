@@ -6,9 +6,11 @@ requires-pixi = ">=0.82"
 
 [dependencies]
 hifithermkin = { path = "." }
-# A snapshot, not editable: the import must not change under a running job. It needs the
-# stage-counts change (StageRow.get_or_create), which the released 0.0.23 lacks.
-autostorage = { path = "../autostorage" }
+# A snapshot, not editable: the import must not change under a running job. A git source
+# builds from its own checkout of the commit, so later edits to the worktree cannot reach
+# it. This is the graph-identities branch (main with stage-counts, plus the interim graph
+# plumbing, which no release has yet).
+autostorage = { git = "file:///home/avcopan/code/am/autostorage.graph-identities", rev = "e08cb8e" }
 h5py = "*"
 rdkit = "*"
 
@@ -37,6 +39,7 @@ qcdata = false
 qcref = false
 autogeom = "autogeom"  # from the avcopan/automech channel
 autostorage = "autostorage"  # likewise
+protomol = "protomol"  # likewise
 
 [pypi-dependencies]
 qccodec = ">=0.22.0"

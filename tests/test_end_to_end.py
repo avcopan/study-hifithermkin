@@ -11,11 +11,18 @@ from typing import TYPE_CHECKING
 
 import h5py
 import pytest
-from autostorage import CalculationRow, Database, StationaryPointRow
+from autostorage import (
+    CalculationRow,
+    Database,
+    IdentityStationaryLink,
+    StationaryPointRow,
+)
 from sqlmodel import select
 
 from hifithermkin import check, importer, sources
 from hifithermkin.parse import ParsedLog, parse_log
+
+from .test_graphs import PRODUCT, REACTANT, write_h5
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -165,3 +172,21 @@ def test_check_energies_against_h5_and_sdf(data: Path, tmp_path: Path) -> None:
         text = check.stjohn_energies_section(session, records)
     assert "1 compared (1 without a record)" in text
     assert "2.00e-03" in text
+
+
+def test_import_with_graph_identities(
+    data: Path, tmp_path: Path, logs: dict[str, ParsedLog]
+) -> None:
+    (data / "rgd1/RGD1CHNO_AMsmiles.csv").write_text(
+        "reaction,reactant,product,DE_F,DE_B,DG_F,DG_B,DH\n"
+        f'MR_299320_1,"{REACTANT}","{PRODUCT}",0,0,0,0,0\n'
+    )
+    write_h5(data, logs["rgd1_ts_MR_299320_1"], shuffle=False)
+    out = tmp_path / "graphs.db"
+    counts = importer.run_logs("rgd1", out, subset=False, workers=1, graphs=True)
+    assert counts["graph_ts_from_mapped_smiles"] == 1, dict(counts)
+    assert counts["graph_perceived"] == 2
+    with Database(out) as db, db.session() as session:
+        links = session.exec(select(IdentityStationaryLink)).all()
+        names = [link.identity.algorithm_name for link in links]
+    assert names.count("protomol_graph@0") == 3  # the TS, and the two perceived

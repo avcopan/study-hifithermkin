@@ -53,9 +53,9 @@ class ParsedLog:
     unclassified: list[str]
     nimag: int
     routes: list[str]  # every route of the log, in order
-    output: dict[
-        str, Any
-    ]  # NImag, frequencies, ZPE, thermal corrections, T, P, version
+    output: dict[str, Any]  # NImag, frequencies, ZPE, thermal corrections, T, P
+    graph: Any = None  # a protomol graph for the stationary point (see graphs.py)
+    graph_status: str = ""  # how it was made, or why not; counted by the store
 
     @property
     def spin(self) -> int:
