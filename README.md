@@ -16,6 +16,27 @@ Installation instructions...
 
 Usage instructions...
 
+## The import and its provenance
+
+`pixi run import-rgd1` and `pixi run import-stjohn` write RGD1 and stjohn-radicals into one
+AutoStorage database each (`python -m hifithermkin.importer --help`); `python -m
+hifithermkin.check` reports on a database against its sources.
+
+Convention for what goes where, per Gaussian log:
+
+- `ModelRow` is the wavefunction model only: program, version, method (`M06-2X`), basis
+  (`def2-TZVP`) and the keywords that change the result (`reference` as `rks`/`uks`/`roks`,
+  `empiricaldispersion`, a non-default `integral` grid, `scf` convergence, `stable`). Optimizer
+  and job keywords are not model keywords.
+- `CalculationRow.input_provenance` fully specifies the input: `dataset`, `archive`,
+  `member`, `md5` of the log, `routes` (every route of the log), and `input`, a list with one
+  entry per Gaussian job in the log, rebuilt from the input the log echoes: `link0` (the `%`
+  lines), `route`, `title`, `charge`, `multiplicity`, `geometry` (the echoed atom lines as
+  written; empty when the job reads it from a checkpoint) and `text`, the same in Gaussian
+  input-file form.
+- `CalculationRow.output_provenance` holds what the program reported: version, NImag,
+  frequencies, zero-point energy, thermal corrections, temperature and pressure.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first

@@ -120,3 +120,6 @@ def test_round_trip(database: Database, logs: dict[str, ParsedLog]) -> None:
         calculation = session.exec(select(CalculationRow)).one()
         assert (calculation.input_provenance or {})["md5"] == log.md5
         assert (calculation.output_provenance or {})["nimag"] == 0
+        (job,) = (calculation.input_provenance or {})["input"]
+        assert job["charge"] == 0
+        assert job["multiplicity"] == 2

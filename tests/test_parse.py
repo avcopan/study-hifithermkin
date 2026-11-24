@@ -85,3 +85,32 @@ def test_subset_filter() -> None:
     skip = parse_log("rgd1", "a", "RP/mol1.out", _raw("rgd1_nh3_minimum"), subset=True)
     assert isinstance(skip, Skip)
     assert skip.reason == "outside_subset"
+
+
+def test_echoed_input_of_a_single_job(logs: dict[str, ParsedLog]) -> None:
+    (job,) = logs["rgd1_nh3_minimum"].echoed_input
+    assert job["link0"] == ["%NProcShared=8", "%Mem=8000MB"]
+    assert job["route"].endswith("Int=UltraFine SCF=QC Freq")
+    assert (job["title"], job["charge"], job["multiplicity"]) == ("mol83138 Opt", 0, 1)
+    assert len(job["geometry"]) == 4
+    assert job["geometry"][0] == "N 1.05522 0.0701 -0.06024"
+    assert job["text"].splitlines()[:3] == [
+        "%NProcShared=8",
+        "%Mem=8000MB",
+        job["route"],
+    ]
+    assert job["text"].endswith("H 2.07255 0.01222 -0.06767\n")
+
+
+def test_echoed_input_of_a_two_job_log(logs: dict[str, ParsedLog]) -> None:
+    first, second = logs["stjohn_radical_stable_opt"].echoed_input
+    assert first["route"].startswith("# stable=opt")
+    assert (first["charge"], first["multiplicity"], len(first["geometry"])) == (
+        0,
+        2,
+        14,
+    )
+    # the second job reads its geometry from the checkpoint: nothing is echoed
+    assert second["route"].endswith("guess=read geom=check")
+    assert second["geometry"] == []
+    assert second["link0"][0].startswith("%chk=")

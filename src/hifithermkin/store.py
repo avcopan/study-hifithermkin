@@ -97,6 +97,7 @@ class Store:
                 "member": log.member,
                 "md5": log.md5,
                 "routes": log.routes,
+                "input": log.echoed_input,
             },
             output_provenance=log.output,
         )

@@ -384,7 +384,7 @@ def rgd1_energies_section(session: AutostorageSession, h5_path: Path) -> str:
             if straight < LOOSE:
                 channels["R_E and P_E agree"] += 1
             elif swapped < LOOSE:
-                channels["R_E and P_E swapped in the h5"] += 1
+                channels["h5 group stored in reverse direction (consistent)"] += 1
             else:
                 channels["other"] += 1
                 other.append((min(straight, swapped), channel))
