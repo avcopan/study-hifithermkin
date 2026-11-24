@@ -32,6 +32,7 @@ __all__ = [
     "rgd1_members",
     "rgd1_subset_species",
     "rgd1_zip",
+    "rgd1_zip_read",
     "stjohn_members",
     "stjohn_tar",
 ]
@@ -64,6 +65,11 @@ def _zip(path: Path) -> zipfile.ZipFile:
     if handle is None:
         handle = _zips[str(path)] = zipfile.ZipFile(path)
     return handle
+
+
+def rgd1_zip_read(member: str) -> bytes:
+    """The bytes of one member of the RGD1 zip."""
+    return _zip(rgd1_zip()).read(member)
 
 
 def rgd1_mapping(path: Path | None = None) -> dict[str, tuple[list[str], list[str]]]:
