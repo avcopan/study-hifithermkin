@@ -59,6 +59,9 @@ def data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             info = tarfile.TarInfo(f"20200411_scidata_logs/{name}.log.gz")
             info.size = len(packed)
             tar.addfile(info, io.BytesIO(packed))
+    (root / "rgd1/RGD1CHNO_AMsmiles.csv").write_text(
+        "reaction,reactant,product,DE_F,DE_B,DG_F,DG_B,DH\nMR_299320_1,a,b,0,0,0,0,0\n"
+    )
     monkeypatch.setenv("DATA_DIR", str(root))
     return root
 
@@ -139,6 +142,7 @@ def test_check_energies_against_h5_and_sdf(data: Path, tmp_path: Path) -> None:
     with Database(out) as db, db.session() as session:
         text = check.rgd1_energies_section(session, tmp_path / "x.h5")
     assert "TS: 1 compared, largest |E(log) - TS_E| = 1.00e-03" in text
+    assert "barriers against the CSV" in text
 
     sdf = data / "stjohn-radicals/20200415_radical_database.sdf.gz"
     block = "\n  RDKit          3D\n\n  0  0  0  0  0  0  0  0  0  0999 V3000\n"

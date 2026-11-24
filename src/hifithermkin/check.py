@@ -10,6 +10,7 @@ against the h5 and SDF, and time and size per point.
 from __future__ import annotations
 
 import argparse
+import csv
 import gzip
 import json
 import random
@@ -50,6 +51,8 @@ FREQUENCY_TOLERANCE = 1.0  # cm^-1
 LINE = "\n"
 CONNECTIVITY = 3  # InChI layers: version, formula, connectivity
 MAX_EXAMPLES = 5
+LOOSE = 1e-5  # Eh, agreement with the h5
+HARTREE_TO_KCAL = 627.5094740631
 
 
 def _table(rows: list[tuple[Any, ...]], header: tuple[str, ...]) -> str:
@@ -273,16 +276,13 @@ def round_trip_section(session: AutostorageSession, dataset: str, sample: int) -
 
 def _kind(source_smiles: str, stored: str, expected: str) -> str:
     """Classify an InChI mismatch."""
-    layers = lambda s: s.split("/")  # noqa: E731
-    if (
-        layers(stored)[:CONNECTIVITY] == layers(expected)[:CONNECTIVITY]
-        and len(layers(stored)) > CONNECTIVITY
-    ):
-        return "stereo or hydrogen layers"
-    if layers(stored)[1:2] != layers(expected)[1:2]:
-        return "formula"
+    stored_layers, expected_layers = stored.split("/"), expected.split("/")
     if "+" in source_smiles or "-]" in source_smiles:
         return "charge separation"
+    if stored_layers[1:CONNECTIVITY] == expected_layers[1:CONNECTIVITY]:
+        return "stereo or hydrogen layers"
+    if stored_layers[1:2] != expected_layers[1:2]:
+        return "formula"
     return "connectivity (resonance or other)"
 
 
@@ -332,12 +332,25 @@ def inchi_section(
     return LINE.join(lines)
 
 
+def energy_channels(energy: dict[str, float]) -> list[str]:
+    """The reaction channels whose TS log is among ``energy``'s members."""
+    suffix = "-TS.out"
+    return [m.rsplit("/", 1)[-1][: -len(suffix)] for m in energy if m.endswith(suffix)]
+
+
+def _csv_barriers(channels: set[str]) -> dict[str, tuple[float, float]]:
+    """DE_F and DE_B (kcal/mol) of the given channels from the RGD1 CSV."""
+    path = sources.data_dir() / "rgd1/RGD1CHNO_AMsmiles.csv"
+    with path.open(newline="") as handle:
+        return {
+            row["reaction"]: (float(row["DE_F"]), float(row["DE_B"]))
+            for row in csv.DictReader(handle)
+            if row["reaction"] in channels
+        }
+
+
 def rgd1_energies_section(session: AutostorageSession, h5_path: Path) -> str:
     """TS and reaction energies against the h5 (R_E, P_E, TS_E)."""
-    lines = ["## Energies against the h5"]
-    worst_ts = 0.0
-    worst_r = 0.0
-    n = 0
     energy: dict[str, float] = {}
     for point in session.exec(select(StationaryPointRow)).all():
         member = (point.calculation.input_provenance or {})["member"]
@@ -347,35 +360,64 @@ def rgd1_energies_section(session: AutostorageSession, h5_path: Path) -> str:
             if p.property_kind_name == "energy"
         )
         energy[member] = float(value)
+    ts_diffs: list[float] = []
+    channels: Counter[str] = Counter()
+    other: list[tuple[float, str]] = []
+    mapping = sources.rgd1_mapping()
     with h5py.File(h5_path) as h5:
         for member, e_ts in energy.items():
-            if not member.endswith("-TS.out"):
-                continue
-            channel = member.rsplit("/", 1)[-1][: -len("-TS.out")]
-            if channel in h5:
-                worst_ts = max(worst_ts, abs(e_ts - float(h5[channel]["TS_E"][()])))
-                n += 1
-        mapping = sources.rgd1_mapping()
-        m = 0
+            if member.endswith("-TS.out"):
+                channel = member.rsplit("/", 1)[-1][: -len("-TS.out")]
+                if channel in h5:
+                    ts_diffs.append(abs(e_ts - float(h5[channel]["TS_E"][()])))
         for channel, (reactants, products) in mapping.items():
-            parts = [
-                energy.get(f"raw_output/RP/{mol}.out")
-                for mol in (*reactants, *products)
-            ]
-            if channel not in h5 or None in parts:
+            keys = [f"raw_output/RP/{mol}.out" for mol in (*reactants, *products)]
+            if channel not in h5 or any(k not in energy for k in keys):
                 continue
-            e_r = sum(energy[f"raw_output/RP/{mol}.out"] for mol in reactants)
-            e_p = sum(energy[f"raw_output/RP/{mol}.out"] for mol in products)
-            worst_r = max(
-                worst_r,
-                abs(e_r - float(h5[channel]["R_E"][()])),
-                abs(e_p - float(h5[channel]["P_E"][()])),
+            ours_r = sum(energy[f"raw_output/RP/{mol}.out"] for mol in reactants)
+            ours_p = sum(energy[f"raw_output/RP/{mol}.out"] for mol in products)
+            h5_r, h5_p = float(h5[channel]["R_E"][()]), float(h5[channel]["P_E"][()])
+            straight = max(abs(ours_r - h5_r), abs(ours_p - h5_p))
+            swapped = max(abs(ours_r - h5_p), abs(ours_p - h5_r))
+            if straight < LOOSE:
+                channels["R_E and P_E agree"] += 1
+            elif swapped < LOOSE:
+                channels["R_E and P_E swapped in the h5"] += 1
+            else:
+                channels["other"] += 1
+                other.append((min(straight, swapped), channel))
+    barriers = _csv_barriers(set(energy_channels(energy)))
+    csv_diffs = []
+    for channel, (de_f, de_b) in barriers.items():
+        reactants, products = mapping[channel]
+        e_ts = energy[f"raw_output/final-TS/{channel}-TS.out"]
+        sides = [
+            sum(energy.get(f"raw_output/RP/{mol}.out", np.nan) for mol in mols)
+            for mols in (reactants, products)
+        ]
+        csv_diffs.append(
+            max(
+                abs((e_ts - sides[0]) * HARTREE_TO_KCAL - de_f),
+                abs((e_ts - sides[1]) * HARTREE_TO_KCAL - de_b),
             )
-            m += 1
-    lines.append(f"- TS: {n} compared, largest |E(log) - TS_E| = {worst_ts:.2e} Eh")
+        )
+    lines = [
+        "## Energies against the h5",
+        (
+            f"- TS: {len(ts_diffs)} compared, largest |E(log) - TS_E| = "
+            f"{max(ts_diffs, default=0.0):.2e} Eh"
+        ),
+        (
+            "- reactant and product sides (sums of the species energies against "
+            f"R_E / P_E; agreement within {LOOSE:.0e} Eh), by reaction: "
+            f"{dict(channels)}"
+        ),
+    ]
+    lines += [f"  - {d:.2e}: {c}" for d, c in sorted(other, reverse=True)[:5]]
+    ok = [d for d in csv_diffs if np.isfinite(d)]  # NaN: a species not imported
     lines.append(
-        f"- reactants/products: {m} reactions compared (sums of the species "
-        f"energies), largest difference {worst_r:.2e} Eh"
+        f"- barriers against the CSV (DE_F, DE_B in kcal/mol): {len(ok)} reactions, "
+        f"largest difference {max(ok, default=0.0):.3f} kcal/mol"
     )
     return LINE.join(lines)
 
