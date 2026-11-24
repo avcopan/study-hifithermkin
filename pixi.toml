@@ -63,6 +63,9 @@ solve-strategy = "lowest"
 [feature.lowest.constraints]
 # qcdata (PyPI only) needs pydantic>=2.12, above what the conda solve would pick
 pydantic = ">=2.12"
+# autostorage allows sqlmodel>=0.0.31, but its numpy-array columns fail there with
+# pydantic>=2.12 ("<class numpy.ndarray> has no matching SQLAlchemy type"); 0.0.38 works
+sqlmodel = ">=0.0.38"
 # qccodec (PyPI only, so not constrained by conda) needs packaging>=23.0
 packaging = ">=23.0"
 # Data packages that should always be recent
