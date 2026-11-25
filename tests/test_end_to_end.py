@@ -190,5 +190,7 @@ def test_import_with_graph_identities(
         links = session.exec(select(IdentityStationaryLink)).all()
         names = [link.identity.algorithm_name for link in links]
         text = check.graph_order_section(session, 5)
-    assert names.count("protomol_graph@0") == 3  # the TS, and the two perceived
+    assert names.count("protomol_graph@0") == 1  # the TS (saddle points only)
+    assert names.count("smg_low_t@1") == 2  # the two perceived minima
+    assert names.count("smg_conn@1") == 3  # all three
     assert "1 sampled TSs (0 without a graph): 0 disagree" in text

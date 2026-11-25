@@ -9,9 +9,10 @@ built here are for the points that cannot be perceived that way:
 - a "minimum" at order > 0 (a false minimum) gets the graph of its geometry, in its own
   atom order.
 
-Autostorage turns these graphs into its graph identities (``protomol_graph@0`` today,
-``smg_conn@1`` once that is released); pm P29 (atom-mapped reaction SMILES to a reaction
-graph) formalizes this glue later.
+Autostorage turns these graphs into its graph identities: ``smg_conn@1`` (stereo-free,
+minima and TSs), ``smg_low_t@1`` (minima) and the interim ``protomol_graph@0`` (saddle
+points), the TS ones in a canonical direction. pm P29 (atom-mapped reaction SMILES to a
+reaction graph) formalizes this glue later.
 
 A TS graph is also checked against the h5 geometries, and a disagreement is a *flag* on
 the point (it is still imported): :func:`ts_flags`.

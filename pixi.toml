@@ -8,9 +8,11 @@ requires-pixi = ">=0.82"
 hifithermkin = { path = "." }
 # A snapshot, not editable: the import must not change under a running job. A git source
 # builds from its own checkout of the commit, so later edits to the checkout cannot reach
-# it. This is autostorage main (identity schema merged, self-reaction steps); repin to
-# smg-low-t once it has smg_conn@1 / smg_low_t@1.
-autostorage = { git = "file:///home/avcopan/code/am/autostorage", rev = "58ed480" }
+# it. This is autostorage smg-low-t (smg_conn@1, smg_low_t@1, no barrierless self-steps),
+# with protomol's local incite-run branch (low_t, canonical_direction), pinned the same
+# way. Repin both to their releases (autostorage 0.0.24, protomol 0.0.3).
+autostorage = { git = "file:///home/avcopan/code/am/autostorage", rev = "1c497e1" }
+protomol = { git = "file:///home/avcopan/code/pm/protomol.incite-run", rev = "70dbb8e" }
 h5py = "*"
 rdkit = "*"
 
