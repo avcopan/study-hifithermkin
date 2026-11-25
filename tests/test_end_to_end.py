@@ -10,6 +10,7 @@ import zipfile
 from typing import TYPE_CHECKING
 
 import h5py
+import numpy as np
 import pytest
 from autostorage import (
     CalculationRow,
@@ -194,3 +195,19 @@ def test_import_with_graph_identities(
     assert names.count("smg_low_t@1") == 2  # the two perceived minima
     assert names.count("smg_conn@1") == 3  # all three
     assert "1 sampled TSs (0 without a graph): 0 disagree" in text
+
+
+def test_near_linear_modes() -> None:
+    """Autogeom's extra mode of a near-linear molecule is dropped; others are kept."""
+    logged = np.array([100.0, 500.0, 2000.0])
+    freqs = np.array([0.5, 100.0, 500.0, 2000.0])  # autogeom: one mode more
+    kept, near = check.near_linear_modes(freqs, logged)
+    assert near
+    assert np.allclose(kept, logged)
+    kept, near = check.near_linear_modes(np.array([90.0, 100.0, 500.0, 2000.0]), logged)
+    assert near  # the extra mode can be any one
+    kept, near = check.near_linear_modes(np.array([1.0, 2.0, 3.0, 4.0]), logged)
+    assert not near  # no match
+    kept, near = check.near_linear_modes(logged, logged)
+    assert not near
+    assert kept is logged

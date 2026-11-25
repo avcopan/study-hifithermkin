@@ -167,6 +167,22 @@ def _geometry(row: GeometryRow) -> autogeom.Geometry:
     )
 
 
+def near_linear_modes(freqs: np.ndarray, logged: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Autogeom's sorted modes, without the extra one of a near-linear molecule.
+
+    Gaussian counts 3N-6 modes for a geometry that is linear to the log's precision,
+    while autogeom counts 3N-5. If autogeom has one mode more and dropping one of its
+    modes matches the log within `FREQUENCY_TOLERANCE`, that mode is dropped.
+    """
+    if len(freqs) != len(logged) + 1:
+        return freqs, False
+    dropped = [np.delete(freqs, k) for k in range(len(freqs))]
+    diffs = [float(np.max(np.abs(d - logged))) if len(d) else 0.0 for d in dropped]
+    if min(diffs) > FREQUENCY_TOLERANCE:
+        return freqs, False
+    return dropped[int(np.argmin(diffs))], True
+
+
 def frequencies_section(session: AutostorageSession) -> str:
     """Frequencies from the stored Hessians against the logs' (every point)."""
     worst = 0.0
@@ -194,16 +210,12 @@ def frequencies_section(session: AutostorageSession) -> str:
         except Exception as exc:  # noqa: BLE001
             bad.append((f"{member}: {type(exc).__name__}", float("nan")))
             continue
-        freqs = np.sort(vib.frequencies)
+        freqs, is_near_linear = near_linear_modes(
+            np.sort(vib.frequencies), np.sort(logged)
+        )
         logged = np.sort(logged)
-        if len(freqs) + 1 == len(logged):
-            # Gaussian counts 3N-6 for a geometry that is linear to the log's precision;
-            # autogeom counts 3N-5. Compare with the one logged mode dropped that fits.
-            dropped = [np.delete(logged, k) for k in range(len(logged))]
-            diffs = [float(np.max(np.abs(freqs - d))) for d in dropped]
-            if min(diffs) <= FREQUENCY_TOLERANCE:
-                near_linear.append(member)
-                logged = dropped[int(np.argmin(diffs))]
+        if is_near_linear:
+            near_linear.append(member)
         if len(freqs) != len(logged):
             bad.append((f"{member}: {len(freqs)} vs {len(logged)} modes", float("nan")))
             continue
@@ -217,8 +229,8 @@ def frequencies_section(session: AutostorageSession) -> str:
         (
             f"{n} points compared; worst |Δν| = {worst:.3f} cm⁻¹; "
             f"{len(bad)} beyond {FREQUENCY_TOLERANCE} cm⁻¹ or not comparable; "
-            f"{len(near_linear)} near-linear (Gaussian logged one mode more than 3N-5, "
-            "compared without it)."
+            f"{len(near_linear)} near-linear (Gaussian logged 3N-6 modes, autogeom "
+            "gives 3N-5; compared without autogeom's extra one)."
         ),
     ]
     lines += [f"- near-linear: {member}" for member in near_linear]
