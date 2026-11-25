@@ -76,10 +76,6 @@ def add_reaction(
         if reason is not None:
             counts[f"skipped_{reason}"] += 1
             return reason
-    if sorted(reactants) == sorted(products):
-        # e.g. conformers of one species: a step cannot connect a stage to itself
-        counts["skipped_same_reactants_and_products"] += 1
-        return "same_reactants_and_products"
     repeated = [len(set(side)) < len(side) for side in sides]
     pending = set(session.new)
     try:
@@ -104,5 +100,7 @@ def add_reaction(
         counts[f"skipped_{reason}"] += 1
         return reason
     counts["steps"] += 1
+    if sorted(reactants) == sorted(products):
+        counts["self_reaction_steps"] += 1
     counts["sides_with_repeats"] += sum(repeated)
     return "ok"

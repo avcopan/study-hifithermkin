@@ -168,9 +168,10 @@ def test_missing_species(world: World) -> None:
     assert world.react("MR_1_0", ["mol1", "mol9"], ["mol2"]) == "species_not_imported"
 
 
-def test_reaction_with_equal_sides_is_skipped(world: World) -> None:
-    assert (
-        world.react("MR_1_0", ["mol1", "mol2"], ["mol2", "mol1"])
-        == "same_reactants_and_products"
-    )
-    assert world.counts["skipped_same_reactants_and_products"] == 1
+def test_reaction_with_equal_sides_is_a_self_reaction_step(world: World) -> None:
+    assert world.react("MR_1_0", ["mol1", "mol1"], ["mol1", "mol1"]) == "ok"
+    world.session.commit()
+    assert world.counts["steps"] == 1
+    assert world.counts["self_reaction_steps"] == 1
+    step = world.session.exec(select(StepRow)).one()
+    assert step.stage_id1 == step.stage_id2

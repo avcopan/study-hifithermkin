@@ -30,7 +30,6 @@ from rdkit.rdBase import DisableLog
 from . import sources
 
 if TYPE_CHECKING:
-
     from .parse import ParsedLog
 
 __all__ = [
