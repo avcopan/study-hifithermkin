@@ -9,9 +9,12 @@ built here are for the points that cannot be perceived that way:
 - a "minimum" at order > 0 (a false minimum) gets the graph of its geometry, in its own
   atom order.
 
-Autostorage turns these graphs into its graph identities (its built-in
-``protomol_graph@0`` today); pm P29 (atom-mapped reaction SMILES to a reaction graph)
-formalizes this glue later.
+Autostorage turns these graphs into its graph identities (``protomol_graph@0`` today,
+``smg_conn@1`` once that is released); pm P29 (atom-mapped reaction SMILES to a reaction
+graph) formalizes this glue later.
+
+A TS graph is also checked against the h5 geometries, and a disagreement is a *flag* on
+the point (it is still imported): :func:`ts_flags`.
 """
 
 from __future__ import annotations
@@ -30,11 +33,16 @@ from rdkit.rdBase import DisableLog
 from . import sources
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from autogeom import Geometry
+
     from .parse import ParsedLog
 
 __all__ = [
     "attach_graph",
     "mapped_reaction_graph",
+    "ts_flags",
     "tsg_matches",
 ]
 
@@ -123,15 +131,69 @@ def _geometry(log: ParsedLog) -> autogeom.Geometry:
     )
 
 
-def _ts_graph(log: ParsedLog) -> tuple[Any, str]:
+def _bonds(symbols: list[str], bonds: Any) -> str:  # noqa: ANN401
+    """Bonds as ``C2-N4`` (atom numbers from 1, the map numbers of the SMILES)."""
+    return (
+        " ".join(f"{symbols[i]}{i + 1}-{symbols[j]}{j + 1}" for i, j in sorted(bonds))
+        or "none"
+    )
+
+
+def ts_flags(
+    graph: protomol.StereoReactionGraph,
+    symbols: list[str],
+    group: Mapping[str, Any],
+    ts_geometry: Geometry,
+) -> list[tuple[str, str]]:
+    """Where a TS graph disagrees with the geometries, as ``(flag, detail)`` pairs.
+
+    - ``bond_changes``: the bonds it breaks and forms differ from those between the
+      graphs perceived from the h5's reactant and product geometries (``RG``, ``PG``).
+      The detail names the bonds that only one of them has.
+    - ``unchanged_bond_missing``: a bond that neither breaks nor forms is missing from
+      the graph perceived from the TS geometry.
+    """
+    flags: list[tuple[str, str]] = []
+    ends = [
+        protomol.from_geometry(
+            autogeom.Geometry(
+                symbols=symbols, coordinates=group[key][()], charge=0, spin=0
+            )
+        )
+        for key in ("RG", "PG")
+    ]
+    perceived = protomol.reaction_graph(*ends)
+    ours = {"breaking": set(graph.breaking), "forming": set(graph.forming)}
+    theirs = {"breaking": set(perceived.breaking), "forming": set(perceived.forming)}
+    if ours != theirs:
+        parts = [
+            f"{kind}: SMILES only {_bonds(symbols, ours[kind] - theirs[kind])}, "
+            f"geometry only {_bonds(symbols, theirs[kind] - ours[kind])}"
+            for kind in ours
+            if ours[kind] != theirs[kind]
+        ]
+        flags.append(("bond_changes", "; ".join(parts)))
+    unchanged = set(graph.bonds) - ours["breaking"] - ours["forming"]
+    missing = unchanged - set(protomol.from_geometry(ts_geometry).bonds)
+    if missing:
+        flags.append(("unchanged_bond_missing", _bonds(symbols, missing)))
+    return flags
+
+
+def _ts_graph(log: ParsedLog) -> tuple[Any, str, tuple[tuple[str, str], ...]]:
     channel = log.member.rsplit("/", 1)[-1].removesuffix("-TS.out")
     smiles = _channels().get(channel)
     group = _h5_file().get(channel)
     if smiles is None or group is None:
-        return None, "ts_no_source"
+        return None, "ts_no_source", ()
     if not tsg_matches(log, group["TSG"][()], group["elements"][()]):
-        return None, "ts_atom_order_mismatch"
-    return mapped_reaction_graph(*smiles, spin=0), "ts_from_mapped_smiles"
+        return None, "ts_atom_order_mismatch", ()
+    graph = mapped_reaction_graph(*smiles, spin=0)
+    try:
+        flags = tuple(ts_flags(graph, log.symbols, group, _geometry(log)))
+    except Exception as exc:  # noqa: BLE001 - the graph is kept; the check is not
+        flags = (("flag_check_error", type(exc).__name__),)
+    return graph, "ts_from_mapped_smiles", flags
 
 
 def attach_graph(log: ParsedLog) -> ParsedLog:
@@ -142,11 +204,12 @@ def attach_graph(log: ParsedLog) -> ParsedLog:
     """
     if log.nimag == 0:
         return dataclasses.replace(log, graph_status="perceived")
+    flags: tuple[tuple[str, str], ...] = ()
     try:
         if log.member.endswith("-TS.out"):
-            graph, status = _ts_graph(log)
+            graph, status, flags = _ts_graph(log)
         else:
             graph, status = protomol.from_geometry(_geometry(log)), "false_minimum"
     except Exception as exc:  # noqa: BLE001 - counted, and the point is stored without
         graph, status = None, f"graph_error:{type(exc).__name__}"
-    return dataclasses.replace(log, graph=graph, graph_status=status)
+    return dataclasses.replace(log, graph=graph, graph_status=status, graph_flags=flags)

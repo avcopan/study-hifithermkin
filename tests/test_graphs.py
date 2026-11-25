@@ -11,14 +11,14 @@ import pytest
 from autostorage import Database, StationaryPointRow
 from sqlmodel import select
 
-from hifithermkin import graphs
+from hifithermkin import graphs, sources
 from hifithermkin.graphs import attach_graph, mapped_reaction_graph, tsg_matches
+from hifithermkin.parse import ParsedLog
+from hifithermkin.reactions import member_of_ts
 from hifithermkin.store import Store
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from hifithermkin.parse import ParsedLog
 
 # MR_299320_1 of RGD1: the SMILES of CSV row, atoms in map-number order
 REACTANT = r"[C:1](\[N:3][C:2]([H:7])[H:8])(=[N:4]\[H:5])[H:6]"
@@ -137,3 +137,39 @@ def test_false_minimum_gets_the_graph_of_its_geometry(
     result = attach_graph(false_minimum)
     assert result.graph_status == "false_minimum"
     assert result.graph.symbols == tuple(false_minimum.symbols)
+
+
+BOND_CHANGES = ["MR_98994_0", "MR_2933_0", "MR_678186_0", "MR_491795_1", "MR_66887_0",
+                "MR_66883_0", "MR_66883_1", "MR_20835_1"]  # fmt: skip
+UNCHANGED_MISSING = ["MR_274058_1", "MR_66887_0", "MR_66883_0", "MR_66883_1"]
+
+
+def _real_flags(channel: str, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    if (
+        not sources.rgd1_zip().exists()
+        or not (sources.data_dir() / "rgd1/RGD1_allrxns.h5").exists()
+    ):
+        pytest.skip("the RGD1 data is not on disk")
+    monkeypatch.setattr(graphs, "_smiles", None)  # not another test's data
+    monkeypatch.setattr(graphs, "_h5", None)
+    log = sources.read_rgd1(member_of_ts(channel))
+    assert isinstance(log, ParsedLog)
+    result = attach_graph(log)
+    assert result.graph_status == "ts_from_mapped_smiles"
+    return dict(result.graph_flags)
+
+
+@pytest.mark.parametrize("channel", BOND_CHANGES)
+def test_flag_bond_changes_of_real_ts(
+    channel: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    detail = _real_flags(channel, monkeypatch)["bond_changes"]
+    assert "SMILES only" in detail
+    assert "-" in detail  # names the atoms, e.g. C2-N4
+
+
+@pytest.mark.parametrize("channel", UNCHANGED_MISSING)
+def test_flag_unchanged_bond_missing_of_real_ts(
+    channel: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert "-" in _real_flags(channel, monkeypatch)["unchanged_bond_missing"]

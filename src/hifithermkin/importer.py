@@ -9,7 +9,9 @@ the database ``X.db`` it keeps, all appended to as the run goes:
   written after the commit that holds it. A rerun with the same ``--out`` skips these
   members. (A kill between a commit and its checkpoint lines repeats at most one batch,
   which adds a second calculation on the same geometry.)
-- ``X.db.failures.csv``: every skipped log and its reason (not ``outside_subset``).
+- ``X.db.failures.csv``: every skipped log and its reason (not ``outside_subset``), and
+  every imported TS whose graph disagrees with the h5 geometries (reason ``flag:...``,
+  detail: the atoms that disagree).
 - ``X.db.reactions.tsv`` (RGD1): one line per reaction, ``ok`` or the reason it was
   skipped.
 - ``X.db.summary.json``: counts and timings, rewritten at the end of each phase.
@@ -163,6 +165,9 @@ class _Writer:
             self.lines.append(f"{result.member}\t{result.reason}\t\t\n")
         else:
             point = self.store.add(result)
+            for flag, detail in result.graph_flags:  # imported all the same
+                self.counts[f"flag_{flag}"] += 1
+                self.failures.writerow([result.member, f"flag:{flag}", detail])
             self.lines.append(f"{result.member}\tok\t{point.id}\t{result.nimag}\n")
             self.in_batch += 1
         self.counts["logs_seen"] += 1

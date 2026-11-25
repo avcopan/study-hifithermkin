@@ -58,6 +58,7 @@ class ParsedLog:
     output: dict[str, Any]  # NImag, frequencies, ZPE, thermal corrections, T, P
     graph: Any = None  # a protomol graph for the stationary point (see graphs.py)
     graph_status: str = ""  # how it was made, or why not; counted by the store
+    graph_flags: tuple[tuple[str, str], ...] = ()  # (flag, detail): see graphs.ts_flags
 
     @property
     def spin(self) -> int:

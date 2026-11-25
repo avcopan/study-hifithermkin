@@ -600,6 +600,22 @@ def size_section(out: Path, session: AutostorageSession) -> str:
     return LINE.join(lines)
 
 
+def flags_section(out: Path) -> str:
+    """The TSs flagged at import (``flag:*`` rows of the failures file)."""
+    path = Path(f"{out}.failures.csv")
+    if not path.exists():
+        return "## TS graph flags\nno failures file"
+    with path.open(newline="") as handle:
+        rows = [r for r in csv.DictReader(handle) if r["reason"].startswith("flag:")]
+    by_flag = Counter(r["reason"] for r in rows)
+    lines = [
+        "## TS graph flags (imported all the same)",
+        f"{len(rows)} flags: {dict(by_flag)}",
+    ]
+    lines += [f"- {r['member']}: {r['reason']}: {r['detail']}" for r in rows]
+    return LINE.join(lines)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Print the report."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -628,6 +644,7 @@ def main(argv: list[str] | None = None) -> None:
             if args.graphs:
                 sections.append(graph_section(session, h5_path))
                 sections.append(graph_order_section(session, args.sample))
+                sections.append(flags_section(args.db))
         else:
             sdf = stjohn_sdf()
 

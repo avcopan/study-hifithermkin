@@ -37,6 +37,12 @@ Convention for what goes where, per Gaussian log:
 - `CalculationRow.output_provenance` holds what the program reported: version, NImag,
   frequencies, zero-point energy, thermal corrections, temperature and pressure.
 
+TSs get their reaction graph from the atom-mapped SMILES. When it disagrees with the h5's
+geometries the TS is still imported, with a *flag* row in `X.db.failures.csv` (`flag:bond_changes`:
+the bonds that only the SMILES or only the geometries break or form; `flag:unchanged_bond_missing`:
+a bond that does not change is missing from the TS geometry's graph), named with the atoms
+(numbered from 1, the map numbers). `python -m hifithermkin.check rgd1 --graphs` lists them.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first
