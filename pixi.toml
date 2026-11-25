@@ -12,6 +12,11 @@ autostorage = { path = "../autostorage" }
 h5py = "*"
 rdkit = "*"
 
+[tasks]
+# One database per dataset (see src/hifithermkin/importer.py for --subset, --out, --workers)
+import-rgd1 = "python -m hifithermkin.importer rgd1"
+import-stjohn = "python -m hifithermkin.importer stjohn"
+
 [package]
 name = "hifithermkin"
 version = "0.0.0"
