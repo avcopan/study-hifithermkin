@@ -100,8 +100,6 @@ def test_ts_gets_its_graph_and_is_stored_with_an_identity(
     write_h5(rgd1_sources, log, shuffle=False)
     with_graph = attach_graph(ts)
     assert with_graph.graph_status == "ts_from_mapped_smiles"
-    graphs.register_interim_algorithm()
-    graphs.register_interim_algorithm()  # twice is fine
     with Database(tmp_path / "g.db") as db, db.session() as session:
         Store(session).add(with_graph)
         session.commit()

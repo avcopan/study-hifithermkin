@@ -9,9 +9,9 @@ built here are for the points that cannot be perceived that way:
 - a "minimum" at order > 0 (a false minimum) gets the graph of its geometry, in its own
   atom order.
 
-This is glue for the interim ``protomol_graph@0`` identity (see
-:func:`register_interim_algorithm`); pm P29 (atom-mapped reaction SMILES to a reaction
-graph) formalizes it later.
+Autostorage turns these graphs into its graph identities (its built-in
+``protomol_graph@0`` today); pm P29 (atom-mapped reaction SMILES to a reaction graph)
+formalizes this glue later.
 """
 
 from __future__ import annotations
@@ -24,23 +24,18 @@ import autogeom
 import h5py
 import numpy as np
 import protomol
-from autostorage import IdentityAlgorithmRegistry, IdentityKind
 from rdkit import Chem
 from rdkit.rdBase import DisableLog
 
 from . import sources
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from autogeom import Geometry
 
     from .parse import ParsedLog
 
 __all__ = [
     "attach_graph",
     "mapped_reaction_graph",
-    "register_interim_algorithm",
     "tsg_matches",
 ]
 
@@ -48,30 +43,6 @@ MAX_ALIGNED_DISTANCE = 0.1  # Å, between the log's TS geometry and the h5's TSG
 
 _smiles: dict[str, tuple[str, str]] | None = None  # per worker, loaded on first use
 _h5: h5py.File | None = None
-
-
-def protomol_graph_identity_fn(
-    geo: Geometry,  # noqa: ARG001
-    gra: Any = None,  # noqa: ANN401
-    other_geos: Mapping[str, Geometry] | None = None,  # noqa: ARG001
-) -> str:
-    """The interim graph identity: the canonical JSON of the graph as given."""
-    if gra is None:
-        msg = "protomol_graph@0 needs a graph."
-        raise ValueError(msg)
-    return protomol.canonical_json(gra)
-
-
-def register_interim_algorithm() -> None:
-    """Register ``protomol_graph@0``; call before opening each ``Database``."""
-    if any(a.name == "protomol_graph@0" for a in IdentityAlgorithmRegistry.algorithms):
-        return
-    IdentityAlgorithmRegistry.register(
-        name="protomol_graph@0",
-        kind=IdentityKind.GRAPH,
-        identity_fn=protomol_graph_identity_fn,
-        uses_graph=True,
-    )
 
 
 def _mapped_graph(smiles: str, spin: int | None = None) -> protomol.StereoMolGraph:

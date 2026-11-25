@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 from autostorage import Database
 
 from . import sources
-from .graphs import attach_graph, register_interim_algorithm
+from .graphs import attach_graph
 from .parse import ParsedLog, Skip
 from .reactions import Entry, add_reaction
 from .store import Store
@@ -194,8 +194,6 @@ def run_logs(  # noqa: PLR0913
     out.parent.mkdir(parents=True, exist_ok=True)
     done = set(_read_checkpoint(Path(f"{out}.checkpoint.tsv")))
     log.info("%s: %d logs already done", dataset, len(done))
-    if graphs:
-        register_interim_algorithm()  # before the Database seeds its algorithm rows
     with Database(out) as db, db.session() as session:
         writer = _Writer(dataset, session, out, batch=batch)
         try:
@@ -303,7 +301,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--no-reactions", action="store_true")
     parser.add_argument(
-        "--graphs", action="store_true", help="store protomol_graph@0 identities"
+        "--graphs",
+        action="store_true",
+        help="pass graphs (TSs, false minima) to autostorage",
     )
     args = parser.parse_args(argv)
     logging.basicConfig(

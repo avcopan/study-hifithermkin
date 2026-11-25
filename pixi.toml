@@ -7,10 +7,10 @@ requires-pixi = ">=0.82"
 [dependencies]
 hifithermkin = { path = "." }
 # A snapshot, not editable: the import must not change under a running job. A git source
-# builds from its own checkout of the commit, so later edits to the worktree cannot reach
-# it. This is the graph-identities branch (main with stage-counts, plus the interim graph
-# plumbing, which no release has yet).
-autostorage = { git = "file:///home/avcopan/code/am/autostorage.graph-identities", rev = "e08cb8e" }
+# builds from its own checkout of the commit, so later edits to the checkout cannot reach
+# it. This is autostorage main (identity schema merged, self-reaction steps); repin to
+# smg-low-t once it has smg_conn@1 / smg_low_t@1.
+autostorage = { git = "file:///home/avcopan/code/am/autostorage", rev = "58ed480" }
 h5py = "*"
 rdkit = "*"
 
