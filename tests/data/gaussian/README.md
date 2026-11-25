@@ -16,3 +16,7 @@ if you reuse the logs:
 | `stjohn_radical_um062x` | St. John et al., *Sci. Data* **7**, 244 (2020); figshare doi:10.6084/m9.figshare.c.4944855, UM06-2X/def2-TZVP | `20200411_scidata_logs/4321_0.log.gz` |
 | `stjohn_radical_stable_opt` | same, with a `stable=opt` step before the Opt+Freq | `20200411_scidata_logs/195768_5529c4.log.gz` |
 | `stjohn_closed_shell_rm062x` | same, a closed shell (RM06-2X) | `20200411_scidata_logs/447885_07daac.log.gz` |
+
+`tests/data/near_linear/` holds three more St. John logs (`1323_0`, `510622_507d51`,
+`12405_0`, same source, gzipped as in the tarball): linear to the precision of the log, but
+Gaussian prints 3N-6 modes for them.

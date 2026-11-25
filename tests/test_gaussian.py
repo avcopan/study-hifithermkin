@@ -6,6 +6,7 @@ result; these tests compare it with the log text and with physics.
 
 from __future__ import annotations
 
+import gzip
 import re
 from pathlib import Path
 
@@ -216,3 +217,32 @@ def test_terminator_split_across_lines_ends_the_block() -> None:
     reference = expected.frames[-1].results.hessian
     assert reference is not None
     assert np.array_equal(hessian, reference)
+
+
+NEAR_LINEAR = Path(__file__).parent / "data" / "near_linear"
+
+
+@pytest.mark.parametrize("name", ["1323_0", "510622_507d51", "12405_0"])
+def test_near_linear_molecule_keeps_the_modes_gaussian_printed(name: str) -> None:
+    """Gaussian counts 3N-6 modes for a geometry that is linear to ~1e-3 Å.
+
+    The importer's check once read this as a lost frequency (autogeom projects five
+    external modes for it, giving 3N-5). The codec returns what the log prints.
+    """
+    with gzip.open(NEAR_LINEAR / f"{name}.log.gz", "rt") as handle:
+        text = handle.read()
+    data = get_codec("gaussian").parse(CalcType.optimization, stdout=text)
+    assert isinstance(data, OptimizationData)
+    structure = data.frames[-1].structure
+    n = len(structure.symbols)
+    printed = [
+        float(v)
+        for line in re.findall(r"^ Frequencies --(.*)$", text, re.MULTILINE)
+        for v in line.split()
+    ]
+    assert printed == data.extras["gaussian"]["frequencies"]
+    assert len(printed) == 3 * n - 6
+    singular = np.linalg.svd(
+        structure.geometry - structure.geometry.mean(axis=0), compute_uv=False
+    )
+    assert singular[1] / singular[0] < 1e-3  # linear to the precision of the log

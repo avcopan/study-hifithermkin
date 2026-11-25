@@ -171,6 +171,7 @@ def frequencies_section(session: AutostorageSession) -> str:
     """Frequencies from the stored Hessians against the logs' (every point)."""
     worst = 0.0
     bad: list[tuple[str, float]] = []
+    near_linear: list[str] = []
     n = 0
     for point in session.exec(select(StationaryPointRow)).all():
         hessian = next(
@@ -194,10 +195,19 @@ def frequencies_section(session: AutostorageSession) -> str:
             bad.append((f"{member}: {type(exc).__name__}", float("nan")))
             continue
         freqs = np.sort(vib.frequencies)
+        logged = np.sort(logged)
+        if len(freqs) + 1 == len(logged):
+            # Gaussian counts 3N-6 for a geometry that is linear to the log's precision;
+            # autogeom counts 3N-5. Compare with the one logged mode dropped that fits.
+            dropped = [np.delete(logged, k) for k in range(len(logged))]
+            diffs = [float(np.max(np.abs(freqs - d))) for d in dropped]
+            if min(diffs) <= FREQUENCY_TOLERANCE:
+                near_linear.append(member)
+                logged = dropped[int(np.argmin(diffs))]
         if len(freqs) != len(logged):
             bad.append((f"{member}: {len(freqs)} vs {len(logged)} modes", float("nan")))
             continue
-        diff = float(np.max(np.abs(freqs - np.sort(logged)))) if len(freqs) else 0.0
+        diff = float(np.max(np.abs(freqs - logged))) if len(freqs) else 0.0
         worst = max(worst, diff)
         n += 1
         if diff > FREQUENCY_TOLERANCE:
@@ -206,9 +216,12 @@ def frequencies_section(session: AutostorageSession) -> str:
         "## Frequencies from the stored Hessian",
         (
             f"{n} points compared; worst |Δν| = {worst:.3f} cm⁻¹; "
-            f"{len(bad)} beyond {FREQUENCY_TOLERANCE} cm⁻¹ or not comparable."
+            f"{len(bad)} beyond {FREQUENCY_TOLERANCE} cm⁻¹ or not comparable; "
+            f"{len(near_linear)} near-linear (Gaussian logged one mode more than 3N-5, "
+            "compared without it)."
         ),
     ]
+    lines += [f"- near-linear: {member}" for member in near_linear]
     lines += [
         f"- {member}: {diff:.2f}"
         for member, diff in sorted(bad, key=lambda b: -b[1] if b[1] == b[1] else 0)[:30]
