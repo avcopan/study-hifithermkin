@@ -10,6 +10,8 @@ the database ``X.db`` it keeps, all appended to as the run goes:
   members. (A kill between a commit and its checkpoint lines repeats at most one batch,
   which adds a second calculation on the same geometry.)
 - ``X.db.failures.csv``: every skipped log and its reason (not ``outside_subset``).
+- ``X.db.reactions.tsv`` (RGD1): one line per reaction, ``ok`` or the reason it was
+  skipped.
 - ``X.db.summary.json``: counts and timings, rewritten at the end of each phase.
 """
 
@@ -23,7 +25,6 @@ import sys
 import time
 from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,6 +33,7 @@ from autostorage import Database
 
 from . import sources
 from .parse import ParsedLog, Skip
+from .reactions import Entry, add_reaction
 from .store import GraphFn, Store
 
 if TYPE_CHECKING:
@@ -43,21 +45,13 @@ log = logging.getLogger("hifithermkin")
 
 PROGRESS_EVERY = 2000  # logs
 DEFAULT_BATCH = 300  # logs per commit
+REACTION_BATCH = 1000  # reactions per commit
 
 
 def default_out(dataset: str, *, subset: bool) -> Path:
     """The database path of a run."""
     tag = "-subset" if subset else ""
     return sources.data_dir() / "db" / f"{dataset}{tag}-{datetime.now(UTC).date()}.db"
-
-
-@dataclass(frozen=True)
-class Entry:
-    """What the checkpoint knows of one log: its status and, if imported, its point."""
-
-    status: str  # ok, or the reason it was skipped
-    point_id: str | None = None
-    order: int | None = None
 
 
 def _read_checkpoint(path: Path) -> dict[str, Entry]:
@@ -198,6 +192,54 @@ def run_logs(  # noqa: PLR0913
     return counts
 
 
+def run_reactions(out: Path, *, subset: bool, limit: int | None = None) -> Counter[str]:
+    """Add the stages and steps of the RGD1 reactions whose logs were imported."""
+    index = _read_checkpoint(Path(f"{out}.checkpoint.tsv"))
+    mapping = sources.rgd1_mapping()
+    species = sources.rgd1_subset_species() if subset else None
+    marks_path = Path(f"{out}.reactions.tsv")
+    done: set[str] = set()
+    if marks_path.exists():
+        done = {line.split("\t")[0] for line in marks_path.read_text().splitlines()}
+    counts: Counter[str] = Counter()
+    started = time.perf_counter()
+    with Database(out) as db, db.session() as session, marks_path.open("a") as marks:
+        lines: list[str] = []
+
+        def commit() -> None:
+            nonlocal lines
+            session.commit()
+            marks.writelines(lines)
+            marks.flush()
+            lines = []
+
+        for channel, sides in mapping.items():
+            if channel in done:
+                continue
+            if species is not None and not all(
+                m in species for m in (*sides[0], *sides[1])
+            ):
+                continue  # outside the subset: not a reaction of this run
+            if limit is not None and counts["reactions_seen"] >= limit:
+                break
+            result = add_reaction(session, channel, sides, index, counts)
+            lines.append(f"{channel}\t{result}\n")
+            counts["reactions_seen"] += 1
+            if counts["reactions_seen"] % REACTION_BATCH == 0:
+                commit()
+                rate = counts["reactions_seen"] / (time.perf_counter() - started)
+                log.info(
+                    "reactions: %d (%.1f/s), %s",
+                    counts["reactions_seen"],
+                    rate,
+                    dict(counts),
+                )
+        commit()
+    counts["seconds"] = round(time.perf_counter() - started)
+    _write_summary(out, "reactions", counts, Counter())
+    return counts
+
+
 def _write_summary(
     out: Path, phase: str, counts: Counter[str], tokens: Counter[str]
 ) -> None:
@@ -217,6 +259,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH)
     parser.add_argument("--limit", type=int, help="logs to read (testing)")
+    parser.add_argument("--no-reactions", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(message)s", stream=sys.stderr
@@ -230,6 +273,8 @@ def main(argv: list[str] | None = None) -> None:
         batch=args.batch,
         limit=args.limit,
     )
+    if args.dataset == "rgd1" and not args.no_reactions:
+        run_reactions(out, subset=args.subset, limit=args.limit)
 
 
 if __name__ == "__main__":

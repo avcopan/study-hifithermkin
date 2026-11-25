@@ -61,13 +61,16 @@ def data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def test_rgd1_import(data: Path, tmp_path: Path) -> None:
+def test_rgd1_import_and_reactions(data: Path, tmp_path: Path) -> None:
     assert sources.rgd1_zip().parent.parent == data
     out = tmp_path / "rgd1.db"
     counts = importer.run_logs("rgd1", out, subset=False, workers=1, batch=2)
     assert counts["logs"] == 3
     assert counts["skipped_parse_error"] == 1  # mol5093
     assert counts["points_order_1"] == 1  # the TS
+    reactions = importer.run_reactions(out, subset=False)
+    assert reactions["skipped_unbalanced"] == 1  # NH3 -> C2H4
+    assert reactions["skipped_ts_not_imported"] == 2  # MR_5_0 and MR_6_0 have no TS log
     summary = json.loads((tmp_path / "rgd1.db.summary.json").read_text())
     assert summary["logs"]["counts"]["models_created"] == 1
     with Database(out) as db, db.session() as session:
@@ -81,7 +84,8 @@ def test_rgd1_subset_keeps_c_h_o_species(data: Path, tmp_path: Path) -> None:
     assert data.exists()
     out = tmp_path / "subset.db"
     counts = importer.run_logs("rgd1", out, subset=True, workers=1)
-    assert counts["logs"] == 1  # ethene only: NH3 is outside
+    assert counts["logs"] == 1  # ethene only: NH3 is outside, and so are the reactions
+    assert importer.run_reactions(out, subset=True)["reactions_seen"] == 0
 
 
 def test_stjohn_import(data: Path, tmp_path: Path) -> None:
