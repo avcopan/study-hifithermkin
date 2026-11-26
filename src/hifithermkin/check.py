@@ -1,10 +1,14 @@
 """Check an imported database against its sources (the subset gate, and the review).
 
-    python -m hifithermkin.check rgd1 --db DB [--sample 200]
+    python -m hifithermkin.check rgd1 --db DB [--sample 200] [--graphs]
 
-Prints a Markdown report: counts, round trips against the decoder, frequencies from the
-stored Hessians against the logs', RDKit InChI against the source SMILES, energies
-against the h5 and SDF, and time and size per point.
+Prints a Markdown report, section by section: counts, round trips against the decoder,
+frequencies from the stored Hessians against the logs', RDKit InChI against the source
+SMILES, energies against the h5 and SDF, and time and size per point.
+
+Frequencies, InChI and energies cover every point, read in chunks so that memory stays
+bounded. Round trips and the two TS graph sections use ``--sample`` random points (the
+import already flags every TS: see ``failures.csv``).
 """
 
 from __future__ import annotations
@@ -44,7 +48,8 @@ from . import graphs, sources
 from .parse import ParsedLog, parse_log
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    import uuid
+    from collections.abc import Callable, Iterator, Sequence
 
     from autostorage import AutostorageSession
 
@@ -53,6 +58,8 @@ LINE = "\n"
 CONNECTIVITY = 3  # InChI layers: version, formula, connectivity
 MAX_EXAMPLES = 5
 MAX_GRAPH_EXAMPLES = 10
+MAX_BAD_FREQUENCIES = 30
+CHUNK = 1000  # points in memory at a time, about 0.1 MB each with their Hessians
 LOOSE = 1e-5  # Eh, agreement with the h5
 HARTREE_TO_KCAL = 627.5094740631
 
@@ -61,6 +68,37 @@ def _table(rows: list[tuple[Any, ...]], header: tuple[str, ...]) -> str:
     out = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
     out += ["| " + " | ".join(str(c) for c in row) + " |" for row in rows]
     return LINE.join(out)
+
+
+def _point_ids(
+    session: AutostorageSession, order: int | None = None
+) -> list[uuid.UUID]:
+    """The ids of every stationary point (of one order, if given), sorted."""
+    stmt = select(col(StationaryPointRow.id)).order_by(col(StationaryPointRow.id))
+    if order is not None:
+        stmt = stmt.where(StationaryPointRow.order == order)
+    return [i for i in session.exec(stmt).all() if i is not None]
+
+
+def _points(
+    session: AutostorageSession, ids: Sequence[uuid.UUID]
+) -> Iterator[StationaryPointRow]:
+    """The points of ``ids``, in that order, holding `CHUNK` of them at a time.
+
+    The session is emptied before each chunk, so it must have no pending changes, and
+    rows read from it earlier are detached.
+    """
+    for start in range(0, len(ids), CHUNK):
+        session.expunge_all()
+        part = ids[start : start + CHUNK]
+        stmt = select(StationaryPointRow).where(col(StationaryPointRow.id).in_(part))
+        found = {point.id: point for point in session.exec(stmt).all()}
+        yield from (found[i] for i in part)
+
+
+def _member(point: StationaryPointRow) -> str:
+    """The archive member (the log) that a point was imported from."""
+    return (point.calculation.input_provenance or {})["member"]
 
 
 def counts_section(session: AutostorageSession, out: Path) -> str:
@@ -183,13 +221,28 @@ def near_linear_modes(freqs: np.ndarray, logged: np.ndarray) -> tuple[np.ndarray
     return dropped[int(np.argmin(diffs))], True
 
 
+def shifted_modes(freqs: np.ndarray, logged: np.ndarray) -> tuple[int, float]:
+    """How far a near-linear molecule is off when no single extra mode explains it.
+
+    ``freqs`` (sorted) has one mode more than ``logged``. Of the ways to drop one, this
+    takes the one that leaves the fewest modes beyond `FREQUENCY_TOLERANCE` (then the
+    smallest largest difference), and returns that number and difference.
+    """
+    diffs = [np.abs(np.delete(freqs, k) - logged) for k in range(len(freqs))]
+    return min(
+        (int(np.sum(d > FREQUENCY_TOLERANCE)), float(np.max(d, initial=0.0)))
+        for d in diffs
+    )
+
+
 def frequencies_section(session: AutostorageSession) -> str:
     """Frequencies from the stored Hessians against the logs' (every point)."""
     worst = 0.0
     bad: list[tuple[str, float]] = []
     near_linear: list[str] = []
+    shifted: list[tuple[str, int, float]] = []
     n = 0
-    for point in session.exec(select(StationaryPointRow)).all():
+    for point in _points(session, _point_ids(session)):
         hessian = next(
             (
                 p.value
@@ -198,7 +251,7 @@ def frequencies_section(session: AutostorageSession) -> str:
             ),
             None,
         )
-        member = (point.calculation.input_provenance or {})["member"]
+        member = _member(point)
         logged = np.array((point.calculation.output_provenance or {})["frequencies"])
         try:
             vib = autogeom.vibrational_analysis(
@@ -216,6 +269,9 @@ def frequencies_section(session: AutostorageSession) -> str:
         logged = np.sort(logged)
         if is_near_linear:
             near_linear.append(member)
+        if len(freqs) == len(logged) + 1:
+            shifted.append((member, *shifted_modes(freqs, logged)))
+            continue
         if len(freqs) != len(logged):
             bad.append((f"{member}: {len(freqs)} vs {len(logged)} modes", float("nan")))
             continue
@@ -230,13 +286,22 @@ def frequencies_section(session: AutostorageSession) -> str:
             f"{n} points compared; worst |Δν| = {worst:.3f} cm⁻¹; "
             f"{len(bad)} beyond {FREQUENCY_TOLERANCE} cm⁻¹ or not comparable; "
             f"{len(near_linear)} near-linear (Gaussian logged 3N-6 modes, autogeom "
-            "gives 3N-5; compared without autogeom's extra one)."
+            "gives 3N-5; compared without autogeom's extra one); "
+            f"{len(shifted)} near-linear with other modes shifted too (no one extra "
+            "mode explains the difference; not compared)."
         ),
     ]
     lines += [f"- near-linear: {member}" for member in near_linear]
     lines += [
+        f"- near-linear, modes shifted: {member}: {count} beyond "
+        f"{FREQUENCY_TOLERANCE} cm⁻¹, largest {diff:.2f}"
+        for member, count, diff in shifted
+    ]
+    lines += [
         f"- {member}: {diff:.2f}"
-        for member, diff in sorted(bad, key=lambda b: -b[1] if b[1] == b[1] else 0)[:30]
+        for member, diff in sorted(bad, key=lambda b: -b[1] if b[1] == b[1] else 0)[
+            :MAX_BAD_FREQUENCIES
+        ]
     ]
     return LINE.join(lines)
 
@@ -268,15 +333,15 @@ def _stjohn_members(wanted: set[str]) -> dict[str, bytes]:
 
 def round_trip_section(session: AutostorageSession, dataset: str, sample: int) -> str:
     """Geometry, energy and Hessian out of the database against the decoder."""
-    points = list(session.exec(select(StationaryPointRow)).all())
-    random.Random(0).shuffle(points)  # noqa: S311 - a reproducible sample
-    points = points[:sample]
-    members = {(p.calculation.input_provenance or {})["member"] for p in points}
+    ids = _point_ids(session)
+    random.Random(0).shuffle(ids)  # noqa: S311 - a reproducible sample
+    ids = ids[:sample]
+    members = {_member(p) for p in _points(session, ids)}
     packed = _stjohn_members(members) if dataset == "stjohn" else {}
     worst = {"coordinates": 0.0, "energy": 0.0, "hessian": 0.0}
     n = 0
-    for point in points:
-        member = (point.calculation.input_provenance or {})["member"]
+    for point in _points(session, ids):
+        member = _member(point)
         log = _read_log(member, packed, dataset)
         if log is None:
             continue
@@ -321,21 +386,20 @@ def inchi_section(
     kinds: Counter[str] = Counter()
     examples: dict[str, list[str]] = defaultdict(list)
     n = 0
+    # Every InChI in one pass: joined to the points of a chunk of ids instead, SQLite
+    # picks a plan that is quadratic in the number of points.
     stmt = (
-        select(StationaryPointRow, IdentityRow.value)
-        .join(
-            IdentityStationaryLink,
-            col(IdentityStationaryLink.stationary_id) == col(StationaryPointRow.id),
-        )
+        select(col(IdentityStationaryLink.stationary_id), col(IdentityRow.value))
         .join(
             IdentityRow, col(IdentityRow.id) == col(IdentityStationaryLink.identity_id)
         )
-        .where(
-            IdentityRow.algorithm_name == "rdkit_inchi", StationaryPointRow.order == 0
-        )
+        .where(IdentityRow.algorithm_name == "rdkit_inchi")
     )
-    for point, stored in session.exec(stmt).all():
-        member = (point.calculation.input_provenance or {})["member"]
+    inchis = dict(session.exec(stmt).all())
+    ids = [i for i in _point_ids(session, order=0) if i in inchis]
+    for point in _points(session, ids):
+        stored = inchis[point.id]
+        member = _member(point)
         smiles = source_smiles(member)
         if smiles is None:
             kinds["no source smiles"] += 1
@@ -379,14 +443,13 @@ def _csv_barriers(channels: set[str]) -> dict[str, tuple[float, float]]:
 def rgd1_energies_section(session: AutostorageSession, h5_path: Path) -> str:
     """TS and reaction energies against the h5 (R_E, P_E, TS_E)."""
     energy: dict[str, float] = {}
-    for point in session.exec(select(StationaryPointRow)).all():
-        member = (point.calculation.input_provenance or {})["member"]
+    for point in _points(session, _point_ids(session)):
         value = next(
             p.value
             for p in point.geometry.properties
             if p.property_kind_name == "energy"
         )
-        energy[member] = float(value)
+        energy[_member(point)] = float(value)
     ts_diffs: list[float] = []
     channels: Counter[str] = Counter()
     other: list[tuple[float, str]] = []
@@ -449,18 +512,17 @@ def rgd1_energies_section(session: AutostorageSession, h5_path: Path) -> str:
     return LINE.join(lines)
 
 
-def graph_section(session: AutostorageSession, h5_path: Path) -> str:
+def graph_section(session: AutostorageSession, h5_path: Path, sample: int) -> str:
     """The TS graphs: breaking and forming bonds from the mapped SMILES and the h5."""
-    energy_channels_in_db = [
-        (p.calculation.input_provenance or {})["member"]
-        for p in session.exec(select(StationaryPointRow)).all()
-        if p.order == 1
-    ]
-    channels = [
-        m.rsplit("/", 1)[-1].removesuffix("-TS.out")
-        for m in energy_channels_in_db
-        if m.endswith("-TS.out")
-    ]
+    ids = _point_ids(session, order=1)
+    random.Random(0).shuffle(ids)  # noqa: S311 - a reproducible sample
+    channels: list[str] = []
+    for point in _points(session, ids):
+        if len(channels) >= sample:
+            break
+        name = _member(point).rsplit("/", 1)[-1]
+        if name.endswith("-TS.out"):  # not a false minimum
+            channels.append(name.removesuffix("-TS.out"))
     smiles = graphs._channels()  # noqa: SLF001
     agree, disagree = 0, []
     skipped: Counter[str] = Counter()
@@ -499,7 +561,7 @@ def graph_section(session: AutostorageSession, h5_path: Path) -> str:
     lines = [
         "## TS graphs: breaking and forming bonds, mapped SMILES against the h5",
         (
-            f"{len(channels)} TSs: {agree} agree, {len(disagree)} disagree, "
+            f"{len(channels)} sampled TSs: {agree} agree, {len(disagree)} disagree, "
             f"{dict(skipped)} not compared"
         ),
     ]
@@ -513,11 +575,11 @@ def graph_section(session: AutostorageSession, h5_path: Path) -> str:
 def graph_order_section(session: AutostorageSession, sample: int) -> str:
     """Bonds that neither break nor form in a TS graph, against its geometry's bonds."""
     smiles = graphs._channels()  # noqa: SLF001
-    points = [p for p in session.exec(select(StationaryPointRow)).all() if p.order == 1]
-    random.Random(1).shuffle(points)  # noqa: S311 - a reproducible sample
+    ids = _point_ids(session, order=1)
+    random.Random(1).shuffle(ids)  # noqa: S311 - a reproducible sample
     checked, bad, skipped = 0, [], 0
-    for point in points:
-        member = (point.calculation.input_provenance or {})["member"]
+    for point in _points(session, ids):
+        member = _member(point)
         channel = member.rsplit("/", 1)[-1].removesuffix("-TS.out")
         if channel not in smiles:
             skipped += 1
@@ -569,8 +631,8 @@ def stjohn_energies_section(
     worst = 0.0
     n = 0
     missing = 0
-    for point in session.exec(select(StationaryPointRow)).all():
-        member = (point.calculation.input_provenance or {})["member"]
+    for point in _points(session, _point_ids(session)):
+        member = _member(point)
         record = sdf.get(Path(member).name.removesuffix(".log.gz"))
         if record is None:
             missing += 1
@@ -618,14 +680,52 @@ def flags_section(out: Path) -> str:
     if not path.exists():
         return "## TS graph flags\nno failures file"
     with path.open(newline="") as handle:
-        rows = [r for r in csv.DictReader(handle) if r["reason"].startswith("flag:")]
-    by_flag = Counter(r["reason"] for r in rows)
+        flagged = [r for r in csv.DictReader(handle) if r["reason"].startswith("flag:")]
+    by_flag = Counter(r["reason"] for r in flagged)
     lines = [
         "## TS graph flags (imported all the same)",
-        f"{len(rows)} flags: {dict(by_flag)}",
+        f"{len(flagged)} flags: {dict(by_flag)}",
+        f"(the first {MAX_GRAPH_EXAMPLES} of each; all are in the failures file)",
     ]
-    lines += [f"- {r['member']}: {r['reason']}: {r['detail']}" for r in rows]
+    shown: Counter[str] = Counter()
+    for row in flagged:
+        shown[row["reason"]] += 1
+        if shown[row["reason"]] <= MAX_GRAPH_EXAMPLES:
+            lines.append(f"- {row['member']}: {row['reason']}: {row['detail']}")
     return LINE.join(lines)
+
+
+def _sections(session: AutostorageSession, args: argparse.Namespace) -> Iterator[str]:
+    """The sections of the report, each made when it is asked for."""
+    yield counts_section(session, args.db)
+    yield round_trip_section(session, args.dataset, args.sample)
+    yield frequencies_section(session)
+    if args.dataset == "rgd1":
+        smiles = {}
+        for line in (
+            sources.rgd1_zip_read("raw_output/RandP_smiles.txt")
+            .decode()
+            .splitlines()[1:]
+        ):
+            text, _, mol = line.rpartition("   ")
+            smiles[f"raw_output/RP/{mol}.out"] = text
+        yield inchi_section(session, smiles.get)
+        h5_path = sources.data_dir() / "rgd1/RGD1_allrxns.h5"
+        yield rgd1_energies_section(session, h5_path)
+        if args.graphs:
+            yield graph_section(session, h5_path, args.sample)
+            yield graph_order_section(session, args.sample)
+            yield flags_section(args.db)
+    else:
+        sdf = stjohn_sdf()
+
+        def by_member(member: str) -> str | None:
+            record = sdf.get(Path(member).name.removesuffix(".log.gz"))
+            return record[0] if record else None
+
+        yield inchi_section(session, by_member)
+        yield stjohn_energies_section(session, sdf)
+    yield size_section(args.db, session)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -636,38 +736,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--sample", type=int, default=200)
     parser.add_argument("--graphs", action="store_true", help="check the TS graphs")
     args = parser.parse_args(argv)
-    sections = []
     with Database(args.db) as db, db.session() as session:
-        sections.append(counts_section(session, args.db))
-        sections.append(round_trip_section(session, args.dataset, args.sample))
-        sections.append(frequencies_section(session))
-        if args.dataset == "rgd1":
-            smiles = {}
-            for line in (
-                sources.rgd1_zip_read("raw_output/RandP_smiles.txt")
-                .decode()
-                .splitlines()[1:]
-            ):
-                text, _, mol = line.rpartition("   ")
-                smiles[f"raw_output/RP/{mol}.out"] = text
-            sections.append(inchi_section(session, smiles.get))
-            h5_path = sources.data_dir() / "rgd1/RGD1_allrxns.h5"
-            sections.append(rgd1_energies_section(session, h5_path))
-            if args.graphs:
-                sections.append(graph_section(session, h5_path))
-                sections.append(graph_order_section(session, args.sample))
-                sections.append(flags_section(args.db))
-        else:
-            sdf = stjohn_sdf()
-
-            def by_member(member: str) -> str | None:
-                record = sdf.get(Path(member).name.removesuffix(".log.gz"))
-                return record[0] if record else None
-
-            sections.append(inchi_section(session, by_member))
-            sections.append(stjohn_energies_section(session, sdf))
-        sections.append(size_section(args.db, session))
-    print(LINE.join(f"{s}{LINE}" for s in sections))  # noqa: T201
+        for section in _sections(session, args):
+            print(f"{section}{LINE}", flush=True)  # noqa: T201
 
 
 if __name__ == "__main__":

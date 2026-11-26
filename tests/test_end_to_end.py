@@ -191,10 +191,12 @@ def test_import_with_graph_identities(
         links = session.exec(select(IdentityStationaryLink)).all()
         names = [link.identity.algorithm_name for link in links]
         text = check.graph_order_section(session, 5)
+        changes = check.graph_section(session, data / "rgd1/RGD1_allrxns.h5", 5)
     assert names.count("protomol_graph@0") == 1  # the TS (saddle points only)
     assert names.count("smg_low_t@1") == 2  # the two perceived minima
     assert names.count("smg_conn@1") == 3  # all three
     assert "1 sampled TSs (0 without a graph): 0 disagree" in text
+    assert "1 sampled TSs: 0 agree" in changes  # this h5 has no RG and PG
 
 
 def test_near_linear_modes() -> None:
@@ -211,3 +213,36 @@ def test_near_linear_modes() -> None:
     kept, near = check.near_linear_modes(logged, logged)
     assert not near
     assert kept is logged
+
+
+def test_check_in_chunks(
+    data: Path,
+    tmp_path: Path,
+    logs: dict[str, ParsedLog],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A chunk smaller than the database gives the same report, from every point."""
+    out = tmp_path / "rgd1.db"
+    write_h5(data, logs["rgd1_ts_MR_299320_1"], shuffle=False)
+    importer.run_logs("rgd1", out, subset=False, workers=1, graphs=True)
+    with h5py.File(data / "rgd1/RGD1_allrxns.h5", "a") as h5:
+        group = h5["MR_299320_1"]
+        for key in ("R_E", "P_E", "TS_E"):
+            group[key] = 0.0
+    args = ["rgd1", "--db", str(out), "--graphs"]
+    check.main(args)
+    whole = capsys.readouterr().out
+    monkeypatch.setattr(check, "CHUNK", 2)
+    check.main(args)
+    assert capsys.readouterr().out == whole
+    assert "3 points compared" in whole
+    assert "'match': 2" in whole
+    assert "## Time and size" in whole
+
+
+def test_check_near_linear_with_shifted_modes() -> None:
+    logged = np.array([100.0, 500.0, 2000.0])
+    freqs = np.array([0.5, 110.0, 520.0, 2000.0])
+    assert not check.near_linear_modes(freqs, logged)[1]
+    assert check.shifted_modes(freqs, logged) == (2, 20.0)

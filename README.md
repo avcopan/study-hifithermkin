@@ -41,7 +41,10 @@ TSs get their reaction graph from the atom-mapped SMILES. When it disagrees with
 geometries the TS is still imported, with a *flag* row in `X.db.failures.csv` (`flag:bond_changes`:
 the bonds that only the SMILES or only the geometries break or form; `flag:unchanged_bond_missing`:
 a bond that does not change is missing from the TS geometry's graph), named with the atoms
-(numbered from 1, the map numbers). `python -m hifithermkin.check rgd1 --graphs` lists them.
+(numbered from 1, the map numbers).
+
+The check reads the points in chunks, so it runs on the full databases: frequencies, InChI and
+energies cover every point, and round trips and the TS graph sections a random `--sample`.
 
 ## Contributing
 
