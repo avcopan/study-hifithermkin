@@ -43,6 +43,11 @@ the bonds that only the SMILES or only the geometries break or form; `flag:uncha
 a bond that does not change is missing from the TS geometry's graph), named with the atoms
 (numbered from 1, the map numbers).
 
+A TS that gets no graph is imported too, with a row `graph_ts_no_source` (the channel is not in
+the CSV or the h5) or `graph_ts_atom_order_mismatch` (its log geometry does not have the atom
+order of the h5's `TSG`). `python -m hifithermkin.check rgd1 --db X.db --graphs` summarizes
+both kinds of row.
+
 The check reads the points in chunks, so it runs on the full databases: frequencies, InChI and
 energies cover every point, and round trips and the TS graph sections a random `--sample`.
 

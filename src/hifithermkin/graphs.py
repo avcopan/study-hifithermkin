@@ -15,7 +15,9 @@ points), the TS ones in a canonical direction. pm P29 (atom-mapped reaction SMIL
 reaction graph) formalizes this glue later.
 
 A TS graph is also checked against the h5 geometries, and a disagreement is a *flag* on
-the point (it is still imported): :func:`ts_flags`.
+the point (it is still imported): :func:`ts_flags`. A TS whose graph cannot be built for
+lack of a source, or because its log has another atom order, is imported without one,
+with the status in `NO_GRAPH` and the reason in ``graph_detail``.
 """
 
 from __future__ import annotations
@@ -41,13 +43,15 @@ if TYPE_CHECKING:
     from .parse import ParsedLog
 
 __all__ = [
+    "NO_GRAPH",
     "attach_graph",
     "mapped_reaction_graph",
     "ts_flags",
-    "tsg_matches",
+    "tsg_mismatch",
 ]
 
 MAX_ALIGNED_DISTANCE = 0.1  # Å, between the log's TS geometry and the h5's TSG
+NO_GRAPH = frozenset({"ts_no_source", "ts_atom_order_mismatch"})
 
 _smiles: dict[str, tuple[str, str]] | None = None  # per worker, loaded on first use
 _h5: h5py.File | None = None
@@ -96,12 +100,15 @@ def _aligned_distance(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.max(np.linalg.norm(a @ rotation - b, axis=1)))
 
 
-def tsg_matches(log: ParsedLog, tsg: np.ndarray, elements: np.ndarray) -> bool:
-    """Whether the log's geometry has the atom order of the h5's ``TSG``."""
+def tsg_mismatch(log: ParsedLog, tsg: np.ndarray, elements: np.ndarray) -> str | None:
+    """How the log's geometry differs from the atom order of the h5's ``TSG``, if so."""
     symbols = [autogeom.element.from_key(int(z)).symbol for z in elements]
     if symbols != log.symbols:
-        return False
-    return _aligned_distance(log.coordinates, tsg) < MAX_ALIGNED_DISTANCE
+        return "the elements are not those of the h5, in its order"
+    distance = _aligned_distance(log.coordinates, tsg)
+    if distance < MAX_ALIGNED_DISTANCE:
+        return None
+    return f"an atom is {distance:.2f} Å from the h5's TSG after alignment"
 
 
 def _channels() -> dict[str, tuple[str, str]]:
@@ -181,20 +188,32 @@ def ts_flags(
     return flags
 
 
-def _ts_graph(log: ParsedLog) -> tuple[Any, str, tuple[tuple[str, str], ...]]:
+def _ts_graph(
+    log: ParsedLog,
+) -> tuple[Any, str, tuple[tuple[str, str], ...], str]:
+    """The graph, status, flags and detail (why there is no graph) of a TS log."""
     channel = log.member.rsplit("/", 1)[-1].removesuffix("-TS.out")
     smiles = _channels().get(channel)
     group = _h5_file().get(channel)
     if smiles is None or group is None:
-        return None, "ts_no_source", ()
-    if not tsg_matches(log, group["TSG"][()], group["elements"][()]):
-        return None, "ts_atom_order_mismatch", ()
+        missing = [
+            source
+            for source, absent in (
+                ("RGD1CHNO_AMsmiles.csv", smiles is None),
+                ("RGD1_allrxns.h5", group is None),
+            )
+            if absent
+        ]
+        return None, "ts_no_source", (), f"not in {' or '.join(missing)}"
+    mismatch = tsg_mismatch(log, group["TSG"][()], group["elements"][()])
+    if mismatch is not None:
+        return None, "ts_atom_order_mismatch", (), mismatch
     graph = mapped_reaction_graph(*smiles, spin=0)
     try:
         flags = tuple(ts_flags(graph, log.symbols, group, _geometry(log)))
     except Exception as exc:  # noqa: BLE001 - the graph is kept; the check is not
         flags = (("flag_check_error", type(exc).__name__),)
-    return graph, "ts_from_mapped_smiles", flags
+    return graph, "ts_from_mapped_smiles", flags, ""
 
 
 def attach_graph(log: ParsedLog) -> ParsedLog:
@@ -206,11 +225,18 @@ def attach_graph(log: ParsedLog) -> ParsedLog:
     if log.nimag == 0:
         return dataclasses.replace(log, graph_status="perceived")
     flags: tuple[tuple[str, str], ...] = ()
+    detail = ""
     try:
         if log.member.endswith("-TS.out"):
-            graph, status, flags = _ts_graph(log)
+            graph, status, flags, detail = _ts_graph(log)
         else:
             graph, status = protomol.from_geometry(_geometry(log)), "false_minimum"
     except Exception as exc:  # noqa: BLE001 - counted, and the point is stored without
         graph, status = None, f"graph_error:{type(exc).__name__}"
-    return dataclasses.replace(log, graph=graph, graph_status=status, graph_flags=flags)
+    return dataclasses.replace(
+        log,
+        graph=graph,
+        graph_status=status,
+        graph_flags=flags,
+        graph_detail=detail,
+    )

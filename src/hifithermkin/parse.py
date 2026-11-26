@@ -59,6 +59,7 @@ class ParsedLog:
     graph: Any = None  # a protomol graph for the stationary point (see graphs.py)
     graph_status: str = ""  # how it was made, or why not; counted by the store
     graph_flags: tuple[tuple[str, str], ...] = ()  # (flag, detail): see graphs.ts_flags
+    graph_detail: str = ""  # why a TS has no graph: see graphs.NO_GRAPH
 
     @property
     def spin(self) -> int:

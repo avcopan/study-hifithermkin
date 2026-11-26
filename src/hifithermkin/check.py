@@ -675,12 +675,14 @@ def size_section(out: Path, session: AutostorageSession) -> str:
 
 
 def flags_section(out: Path) -> str:
-    """The TSs flagged at import (``flag:*`` rows of the failures file)."""
+    """The TSs flagged at import, and those left without a graph (the failures file)."""
     path = Path(f"{out}.failures.csv")
     if not path.exists():
         return "## TS graph flags\nno failures file"
     with path.open(newline="") as handle:
-        flagged = [r for r in csv.DictReader(handle) if r["reason"].startswith("flag:")]
+        rows = list(csv.DictReader(handle))
+    flagged = [r for r in rows if r["reason"].startswith("flag:")]
+    no_graph = [r for r in rows if r["reason"].startswith("graph_ts_")]
     by_flag = Counter(r["reason"] for r in flagged)
     lines = [
         "## TS graph flags (imported all the same)",
@@ -689,6 +691,16 @@ def flags_section(out: Path) -> str:
     ]
     shown: Counter[str] = Counter()
     for row in flagged:
+        shown[row["reason"]] += 1
+        if shown[row["reason"]] <= MAX_GRAPH_EXAMPLES:
+            lines.append(f"- {row['member']}: {row['reason']}: {row['detail']}")
+    by_reason = Counter(r["reason"] for r in no_graph)
+    lines += [
+        "",
+        "## TSs without a graph (imported all the same)",
+        f"{len(no_graph)} TSs: {dict(by_reason)}",
+    ]
+    for row in no_graph:
         shown[row["reason"]] += 1
         if shown[row["reason"]] <= MAX_GRAPH_EXAMPLES:
             lines.append(f"- {row['member']}: {row['reason']}: {row['detail']}")

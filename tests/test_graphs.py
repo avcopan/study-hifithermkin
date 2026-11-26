@@ -12,7 +12,7 @@ from autostorage import Database, StationaryPointRow
 from sqlmodel import select
 
 from hifithermkin import graphs, sources
-from hifithermkin.graphs import attach_graph, mapped_reaction_graph, tsg_matches
+from hifithermkin.graphs import attach_graph, mapped_reaction_graph, tsg_mismatch
 from hifithermkin.parse import ParsedLog
 from hifithermkin.reactions import member_of_ts
 from hifithermkin.store import Store
@@ -58,11 +58,11 @@ def test_tsg_must_have_the_log_atom_order(logs: dict[str, ParsedLog]) -> None:
         ]
     )
     moved = log.coordinates @ rotation + 3.0
-    assert tsg_matches(log, moved, elements)
+    assert tsg_mismatch(log, moved, elements) is None
     swapped = moved.copy()
     swapped[[0, 1]] = swapped[[1, 0]]  # two atoms in the other order
-    assert not tsg_matches(log, swapped, elements)
-    assert not tsg_matches(log, moved, elements[::-1].copy())
+    assert "from the h5's TSG" in str(tsg_mismatch(log, swapped, elements))
+    assert "elements" in str(tsg_mismatch(log, moved, elements[::-1].copy()))
 
 
 @pytest.fixture
@@ -117,6 +117,7 @@ def test_ts_with_another_atom_order_gets_no_graph(
     result = attach_graph(ts)
     assert result.graph is None
     assert result.graph_status == "ts_atom_order_mismatch"
+    assert result.graph_detail
 
 
 def test_unknown_reaction_and_minimum(
@@ -125,7 +126,9 @@ def test_unknown_reaction_and_minimum(
     log = logs["rgd1_ts_MR_299320_1"]
     write_h5(rgd1_sources, log, shuffle=False)
     other = dataclasses.replace(log, member="raw_output/final-TS/MR_1_0-TS.out")
-    assert attach_graph(other).graph_status == "ts_no_source"
+    no_source = attach_graph(other)
+    assert no_source.graph_status == "ts_no_source"
+    assert no_source.graph_detail == ("not in RGD1CHNO_AMsmiles.csv or RGD1_allrxns.h5")
     minimum = attach_graph(logs["rgd1_nh3_minimum"])
     assert (minimum.graph, minimum.graph_status) == (None, "perceived")
 

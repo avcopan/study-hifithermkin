@@ -9,9 +9,10 @@ the database ``X.db`` it keeps, all appended to as the run goes:
   written after the commit that holds it. A rerun with the same ``--out`` skips these
   members. (A kill between a commit and its checkpoint lines repeats at most one batch,
   which adds a second calculation on the same geometry.)
-- ``X.db.failures.csv``: every skipped log and its reason (not ``outside_subset``), and
+- ``X.db.failures.csv``: every skipped log and its reason (not ``outside_subset``);
   every imported TS whose graph disagrees with the h5 geometries (reason ``flag:...``,
-  detail: the atoms that disagree).
+  detail: the atoms that disagree); and every TS imported without a graph (reason
+  ``graph_ts_no_source`` or ``graph_ts_atom_order_mismatch``).
 - ``X.db.reactions.tsv`` (RGD1): one line per reaction, ``ok`` or the reason it was
   skipped.
 - ``X.db.summary.json``: counts and timings, rewritten at the end of each phase.
@@ -36,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 from autostorage import Database
 
 from . import sources
-from .graphs import attach_graph
+from .graphs import NO_GRAPH, attach_graph
 from .parse import ParsedLog, Skip
 from .reactions import Entry, add_reaction
 from .store import Store
@@ -165,6 +166,9 @@ class _Writer:
             self.lines.append(f"{result.member}\t{result.reason}\t\t\n")
         else:
             point = self.store.add(result)
+            if result.graph_status in NO_GRAPH:  # the store counts these
+                reason = f"graph_{result.graph_status}"
+                self.failures.writerow([result.member, reason, result.graph_detail])
             for flag, detail in result.graph_flags:  # imported all the same
                 self.counts[f"flag_{flag}"] += 1
                 self.failures.writerow([result.member, f"flag:{flag}", detail])
